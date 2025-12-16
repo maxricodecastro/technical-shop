@@ -117,6 +117,13 @@ All assistant suggestions (chips and explanations) must map to these fields.
 - Grounded assistant responses with clarifying questions
 - Add-to-cart interaction
 
+### Tech Stack (Implementation Decision)
+- **Framework:** Next.js 14+ (App Router)
+- **UI Components:** Catalyst UI Kit (Tailwind Labs)
+- **Styling:** Tailwind CSS v4.0
+- **LLM:** Groq (Llama 3.1 70B) for filter generation
+- **Vision:** OpenAI GPT-4o for image analysis
+
 ### Deferred (stretch / later)
 - "More like this" / pin-item-as-reference
 - Personality tuning

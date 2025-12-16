@@ -1,0 +1,438 @@
+import { Product, FilterState, FilterChip } from '@/types'
+
+/**
+ * Filter Engine
+ * 
+ * Applies AND logic across all filter categories.
+ * Within each category (e.g., colors), OR logic is used.
+ * 
+ * Example:
+ * - colors: ["blue", "green"] → product.color is blue OR green
+ * - materials: ["wool"] → AND product.material is wool
+ * - Combined: (blue OR green) AND (wool)
+ */
+
+// ============================================
+// MAIN FILTER FUNCTION
+// ============================================
+
+/**
+ * Applies all active filters to the product list.
+ * Returns products that match ALL filter criteria (AND logic).
+ * 
+ * @param products - Full product catalog
+ * @param filters - Current filter state
+ * @returns Filtered products
+ */
+export function applyFilters(products: Product[], filters: FilterState): Product[] {
+  return products.filter(product => {
+    // Subcategory (single value filter)
+    if (filters.subcategory && product.subcategory !== filters.subcategory) {
+      return false
+    }
+
+    // Colors (OR within, AND with others)
+    if (filters.colors.length > 0 && !filters.colors.includes(product.color)) {
+      return false
+    }
+
+    // Materials (OR within, AND with others)
+    if (filters.materials.length > 0 && !filters.materials.includes(product.material)) {
+      return false
+    }
+
+    // Sizes (OR within, AND with others)
+    if (filters.sizes.length > 0 && !filters.sizes.includes(product.size)) {
+      return false
+    }
+
+    // Style Tags (product must have at least one matching tag)
+    if (filters.styleTags.length > 0) {
+      const hasMatchingTag = product.style_tags.some(tag => 
+        filters.styleTags.includes(tag)
+      )
+      if (!hasMatchingTag) {
+        return false
+      }
+    }
+
+    // Price Range
+    if (filters.minPrice !== null && product.price < filters.minPrice) {
+      return false
+    }
+    if (filters.maxPrice !== null && product.price > filters.maxPrice) {
+      return false
+    }
+
+    // In Stock
+    if (filters.inStock !== null && product.in_stock !== filters.inStock) {
+      return false
+    }
+
+    return true
+  })
+}
+
+// ============================================
+// FILTER STATE HELPERS
+// ============================================
+
+/**
+ * Applies a single chip to the current filter state.
+ * Returns a new FilterState with the chip applied.
+ */
+export function applyChipToFilters(
+  filters: FilterState,
+  chip: FilterChip
+): FilterState {
+  const newFilters = { ...filters }
+
+  switch (chip.filterKey) {
+    case 'subcategory':
+      newFilters.subcategory = chip.filterValue as string
+      break
+
+    case 'colors':
+      if (!newFilters.colors.includes(chip.filterValue as string)) {
+        newFilters.colors = [...newFilters.colors, chip.filterValue as string]
+      }
+      break
+
+    case 'materials':
+      if (!newFilters.materials.includes(chip.filterValue as string)) {
+        newFilters.materials = [...newFilters.materials, chip.filterValue as string]
+      }
+      break
+
+    case 'sizes':
+      if (!newFilters.sizes.includes(chip.filterValue as string)) {
+        newFilters.sizes = [...newFilters.sizes, chip.filterValue as string]
+      }
+      break
+
+    case 'styleTags':
+      if (!newFilters.styleTags.includes(chip.filterValue as string)) {
+        newFilters.styleTags = [...newFilters.styleTags, chip.filterValue as string]
+      }
+      break
+
+    case 'minPrice':
+      newFilters.minPrice = chip.filterValue as number
+      break
+
+    case 'maxPrice':
+      newFilters.maxPrice = chip.filterValue as number
+      break
+
+    case 'inStock':
+      newFilters.inStock = chip.filterValue as boolean
+      break
+  }
+
+  return newFilters
+}
+
+/**
+ * Removes a chip from the current filter state.
+ * Returns a new FilterState with the chip removed.
+ */
+export function removeChipFromFilters(
+  filters: FilterState,
+  chip: FilterChip
+): FilterState {
+  const newFilters = { ...filters }
+
+  switch (chip.filterKey) {
+    case 'subcategory':
+      newFilters.subcategory = null
+      break
+
+    case 'colors':
+      newFilters.colors = newFilters.colors.filter(c => c !== chip.filterValue)
+      break
+
+    case 'materials':
+      newFilters.materials = newFilters.materials.filter(m => m !== chip.filterValue)
+      break
+
+    case 'sizes':
+      newFilters.sizes = newFilters.sizes.filter(s => s !== chip.filterValue)
+      break
+
+    case 'styleTags':
+      newFilters.styleTags = newFilters.styleTags.filter(t => t !== chip.filterValue)
+      break
+
+    case 'minPrice':
+      newFilters.minPrice = null
+      break
+
+    case 'maxPrice':
+      newFilters.maxPrice = null
+      break
+
+    case 'inStock':
+      newFilters.inStock = null
+      break
+  }
+
+  return newFilters
+}
+
+/**
+ * Applies multiple chips to the filter state.
+ */
+export function applyChipsToFilters(
+  filters: FilterState,
+  chips: FilterChip[]
+): FilterState {
+  return chips.reduce((acc, chip) => applyChipToFilters(acc, chip), filters)
+}
+
+/**
+ * Counts how many filters are currently active.
+ */
+export function countActiveFilters(filters: FilterState): number {
+  let count = 0
+  
+  if (filters.subcategory) count++
+  count += filters.colors.length
+  count += filters.materials.length
+  count += filters.sizes.length
+  count += filters.styleTags.length
+  if (filters.minPrice !== null) count++
+  if (filters.maxPrice !== null) count++
+  if (filters.inStock !== null) count++
+  
+  return count
+}
+
+/**
+ * Checks if any filters are active.
+ */
+export function hasActiveFilters(filters: FilterState): boolean {
+  return countActiveFilters(filters) > 0
+}
+
+/**
+ * Converts current filter state to an array of active chips.
+ * Useful for displaying currently applied filters.
+ */
+export function filtersToChips(filters: FilterState): FilterChip[] {
+  const chips: FilterChip[] = []
+
+  if (filters.subcategory) {
+    chips.push({
+      id: `active-subcategory-${filters.subcategory}`,
+      type: 'subcategory',
+      label: capitalize(filters.subcategory),
+      filterKey: 'subcategory',
+      filterValue: filters.subcategory
+    })
+  }
+
+  for (const color of filters.colors) {
+    chips.push({
+      id: `active-color-${color}`,
+      type: 'color',
+      label: capitalize(color),
+      filterKey: 'colors',
+      filterValue: color
+    })
+  }
+
+  for (const material of filters.materials) {
+    chips.push({
+      id: `active-material-${material}`,
+      type: 'material',
+      label: capitalize(material),
+      filterKey: 'materials',
+      filterValue: material
+    })
+  }
+
+  for (const size of filters.sizes) {
+    chips.push({
+      id: `active-size-${size}`,
+      type: 'size',
+      label: size.toUpperCase(),
+      filterKey: 'sizes',
+      filterValue: size
+    })
+  }
+
+  for (const tag of filters.styleTags) {
+    chips.push({
+      id: `active-style-${tag}`,
+      type: 'style_tag',
+      label: capitalize(tag),
+      filterKey: 'styleTags',
+      filterValue: tag
+    })
+  }
+
+  if (filters.minPrice !== null) {
+    chips.push({
+      id: 'active-minprice',
+      type: 'price_range',
+      label: `Min $${filters.minPrice}`,
+      filterKey: 'minPrice',
+      filterValue: filters.minPrice
+    })
+  }
+
+  if (filters.maxPrice !== null) {
+    chips.push({
+      id: 'active-maxprice',
+      type: 'price_range',
+      label: `Max $${filters.maxPrice}`,
+      filterKey: 'maxPrice',
+      filterValue: filters.maxPrice
+    })
+  }
+
+  return chips
+}
+
+// ============================================
+// DERIVE FACETS FROM SUBCATEGORIES
+// ============================================
+
+/**
+ * Gets all unique colors available for the given subcategories.
+ * Used to dynamically surface color options based on what actually exists.
+ */
+export function getColorsForSubcategories(
+  products: Product[],
+  subcategories: string[]
+): string[] {
+  if (subcategories.length === 0) return []
+
+  const colors = new Set<string>()
+  
+  for (const product of products) {
+    if (subcategories.includes(product.subcategory)) {
+      colors.add(product.color)
+    }
+  }
+
+  return Array.from(colors).sort()
+}
+
+/**
+ * Gets all unique materials available for the given subcategories.
+ * Used to supplement LLM-suggested materials with what actually exists.
+ */
+export function getMaterialsForSubcategories(
+  products: Product[],
+  subcategories: string[]
+): string[] {
+  if (subcategories.length === 0) return []
+
+  const materials = new Set<string>()
+  
+  for (const product of products) {
+    if (subcategories.includes(product.subcategory)) {
+      materials.add(product.material)
+    }
+  }
+
+  return Array.from(materials).sort()
+}
+
+/**
+ * Gets all unique style tags available for the given subcategories.
+ */
+export function getStyleTagsForSubcategories(
+  products: Product[],
+  subcategories: string[]
+): string[] {
+  if (subcategories.length === 0) return []
+
+  const styleTags = new Set<string>()
+  
+  for (const product of products) {
+    if (subcategories.includes(product.subcategory)) {
+      for (const tag of product.style_tags) {
+        styleTags.add(tag)
+      }
+    }
+  }
+
+  return Array.from(styleTags).sort()
+}
+
+// ============================================
+// OR-BASED MATCHING (for preview/suggestions)
+// ============================================
+
+/**
+ * Finds products that match ANY of the given chips (OR logic).
+ * Used for preview when showing suggested filters - we want to show
+ * products that would match if the user clicked ANY of the chips.
+ * 
+ * Products are scored by how many chips they match, with best matches first.
+ */
+export function findProductsMatchingAnyChip(
+  products: Product[],
+  chips: FilterChip[]
+): Product[] {
+  if (chips.length === 0) return []
+
+  // Score each product by how many chips it matches
+  const scored = products.map(product => {
+    let score = 0
+    const matchedChips: string[] = []
+
+    for (const chip of chips) {
+      if (doesProductMatchChip(product, chip)) {
+        score++
+        matchedChips.push(chip.label)
+      }
+    }
+
+    return { product, score, matchedChips }
+  })
+
+  // Filter to only products that match at least one chip
+  const matching = scored.filter(s => s.score > 0)
+
+  // Sort by score descending (best matches first)
+  matching.sort((a, b) => b.score - a.score)
+
+  return matching.map(s => s.product)
+}
+
+/**
+ * Checks if a single product matches a single chip.
+ */
+function doesProductMatchChip(product: Product, chip: FilterChip): boolean {
+  const value = chip.filterValue as string
+
+  switch (chip.filterKey) {
+    case 'subcategory':
+      return product.subcategory === value
+    case 'colors':
+      return product.color === value
+    case 'materials':
+      return product.material === value
+    case 'sizes':
+      return product.size === value
+    case 'styleTags':
+      return product.style_tags.includes(value)
+    default:
+      return false
+  }
+}
+
+// ============================================
+// UTILITY FUNCTIONS
+// ============================================
+
+/**
+ * Capitalizes the first letter of a string.
+ */
+function capitalize(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1)
+}
+

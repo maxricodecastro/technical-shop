@@ -3,6 +3,9 @@
 ## Overview
 The application is a product listing page with an AI-powered conversational shopping assistant that can be toggled via a sidebar interface. The layout supports desktop only (no mobile/tablet view).
 
+**UI Framework:** Catalyst UI Kit (Tailwind Labs) + custom components
+**Styling:** Tailwind CSS v4.0
+
 ## Layout Structure
 
 ### Initial State (Default View)
@@ -49,6 +52,28 @@ The application is a product listing page with an AI-powered conversational shop
                            ↕ (Resizable)
 ```
 
+## Component to Catalyst Mapping
+
+| Layout Element | Catalyst Component | Custom |
+|---------------|-------------------|--------|
+| Header | — | Custom with Tailwind |
+| Logo | — | Custom SVG/image |
+| Search bar | `Input` | — |
+| Cart icon | `Button` + `Dropdown` | — |
+| Filters Panel | `Fieldset`, `Field`, `Label` | Container custom |
+| Category filter | `Select` or `Listbox` | — |
+| Color/Material filters | `CheckboxGroup`, `CheckboxField`, `Checkbox` | — |
+| In-stock toggle | `SwitchField`, `Switch` | — |
+| Price slider | — | `@radix-ui/react-slider` |
+| Chat toggle button | `Button` | — |
+| Chat sidebar | `Sidebar`, `SidebarBody`, `SidebarFooter` | — |
+| Chat messages | `Text`, `Heading` | Custom layout |
+| Filter chips | `BadgeButton` | Extended with selected state |
+| Prompt input | `Textarea` or `Input` | — |
+| Send button | `Button` | — |
+| Product card | — | Custom with Tailwind |
+| Add to cart button | `Button` | — |
+
 ## Component Details
 
 ### 1. Header
@@ -62,7 +87,11 @@ The application is a product listing page with an AI-powered conversational shop
 
 ### 2. Filters Panel (Initial State)
 - Fixed width on the left side
-- Contains traditional filter controls (dropdowns, checkboxes, etc.)
+- Contains traditional filter controls:
+  - `Select`/`Listbox` for category/subcategory
+  - `CheckboxGroup` with `Checkbox` for colors, materials
+  - `Switch` for in-stock toggle
+  - Custom `Slider` for price range
 - Has a toggle button at the bottom to activate chat mode
 - **Behavior:** When chat sidebar opens, this panel completely disappears and is replaced by the chat interface
 
@@ -98,11 +127,18 @@ The application is a product listing page with an AI-powered conversational shop
 - Auto-scrolls to bottom when new messages arrive
 
 ### 6. Filter Chips/Tags
+- **Component:** Catalyst `BadgeButton` with extended selected state
 - Appear within the conversation thread as part of assistant responses
 - Clickable to apply filters
 - Visual states:
-  - Unselected: Default state
-  - Selected: Visually distinct (highlighted/active state)
+  - Unselected: `BadgeButton color="zinc"` (subtle gray)
+  - Selected: `BadgeButton color="indigo"` (or type-specific color)
+- Color by filter type:
+  - Category/Subcategory: `indigo`
+  - Colors: `zinc` (neutral to not clash with color name)
+  - Materials: `amber`
+  - Style tags: `violet`
+  - Size: `sky`
 - Selected chips remain only in conversation history (no separate "active filters" UI)
 - When chat sidebar is closed, any applied filters that map to traditional filter controls are automatically set in the filter panel
 
