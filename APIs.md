@@ -330,6 +330,11 @@ interface ChatRequest {
   conversationHistory?: Message[]
   currentFilters?: FilterState
   selectedChips?: FilterChip[]  // Chips user has selected (won't be re-suggested)
+  currentPriceRange?: {         // Current price slider state (manual or LLM-set)
+    min: number
+    max: number
+    isDefault: boolean          // True if price range hasn't been modified
+  }
 }
 ```
 
@@ -342,6 +347,15 @@ interface ChatResponse {
   invalid: FilterChip[]
   errors: string[]
   matchingProducts?: Product[]  // Pre-filtered by occasion, then OR logic for other chips
+  minPrice?: number | null       // LLM-extracted minimum price for slider update
+  maxPrice?: number | null       // LLM-extracted maximum price for slider update
+  appliedFilters?: {             // State sync verification (what backend actually used)
+    suggestedChipCount: number
+    effectiveMinPrice: number | null
+    effectiveMaxPrice: number | null
+    totalProductsBeforeFilter: number
+    totalProductsAfterFilter: number
+  }
 }
 ```
 
@@ -349,8 +363,22 @@ The API filters out any chips that match `selectedChips` values, ensuring no dup
 
 **Matching Products Logic:**
 - If occasion chips are present, products are pre-filtered to only those matching at least one occasion (hard gate)
+- Price filters (minPrice/maxPrice) are applied if extracted from user query
 - Then OR logic applies for other chips within that filtered set
 - This ensures queries like "running outfit" only show athletic products, not casual pants that happen to match a subcategory
+
+**Price Extraction:**
+- The LLM extracts price values ONLY from explicit dollar amounts (e.g., "budget is $200" → maxPrice: 200)
+- Subjective terms like "luxury", "budget-friendly", "premium" do NOT trigger price extraction
+- If frontend has a non-default price range (manual slider adjustment), API uses it unless LLM extracts new values
+- LLM-extracted prices override frontend state
+- Price is controlled via a slider component, not filter chips
+- Price range is inferred from prompts: "budget is $X" → $0 to $X, "minimum $X" → $X to max
+
+**Price Conflict Resolution (Frontend):**
+- If new minPrice > current maxPrice → reset maxPrice to catalog max (275)
+- If new maxPrice < current minPrice → reset minPrice to catalog min (0)
+- If LLM returns both and minPrice > maxPrice → ignore both (invalid range)
 
 ### Chip Post-Processing (in `/api/chat`)
 

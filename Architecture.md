@@ -340,6 +340,65 @@ export interface Message {
   timestamp: number
 }
 
+// === Intent Mode & Replace Categories ===
+export type IntentMode = 'replace' | 'refine' | 'explore'
+
+export type ReplaceCategory =
+  | 'all'              // Clear everything INCLUDING price
+  | 'all_except_price' // Clear all chips but preserve price range
+  | 'subcategory'
+  | 'occasions'
+  | 'materials'
+  | 'colors'
+  | 'style_tags'
+  | 'sizes'
+  | 'price'            // Clear only price (reset to full range)
+
+// === LLM Response ===
+export interface LLMResponse {
+  message: string
+  intentMode: IntentMode
+  replaceCategories: ReplaceCategory[]
+  chips: FilterChip[]
+  priceQuestion?: string
+  minPrice?: number | null  // Extracted minimum price from user query
+  maxPrice?: number | null  // Extracted maximum price from user query
+}
+
+// === Chat Request ===
+export interface ChatRequest {
+  message: string
+  conversationHistory?: Message[]
+  currentFilters?: FilterState
+  selectedChips?: FilterChip[]      // Chips user has selected (don't suggest duplicates)
+  currentPriceRange?: {             // Current price slider state (manual or LLM-set)
+    min: number
+    max: number
+    isDefault: boolean              // True if price range hasn't been modified
+  }
+}
+
+// === Chat Response ===
+export interface ChatResponse {
+  raw: string
+  parsed: LLMResponse | null
+  suggestedChips: FilterChip[]
+  intentMode: IntentMode
+  replaceCategories: ReplaceCategory[]
+  invalid: FilterChip[]
+  errors: string[]
+  matchingProducts?: Product[]
+  minPrice?: number | null          // LLM-extracted minimum price for slider update
+  maxPrice?: number | null          // LLM-extracted maximum price for slider update
+  appliedFilters?: {                // State sync verification data
+    suggestedChipCount: number
+    effectiveMinPrice: number | null
+    effectiveMaxPrice: number | null
+    totalProductsBeforeFilter: number
+    totalProductsAfterFilter: number
+  }
+}
+
 // === UI State ===
 export interface UIState {
   sidebarOpen: boolean
@@ -389,7 +448,9 @@ export const FilterChipSchema = z.object({
 export const LLMChatResponseSchema = z.object({
   message: z.string().min(1, 'Response message cannot be empty'),
   chips: z.array(FilterChipSchema).max(10, 'Too many chips suggested'),
-  priceQuestion: z.string().optional(),
+  priceQuestion: z.string().nullish(), // Can be string, null, or undefined
+  minPrice: z.number().nullish(),     // Extracted minimum price from user query
+  maxPrice: z.number().nullish(),     // Extracted maximum price from user query
 })
 
 // === LLM Regenerate Response Schema ===
@@ -574,7 +635,7 @@ ShopPage (page.tsx)
 │  │     │        ├─ RegenerateButton
 │  │     │        └─ PriceQuestion (if present)
 │  │     ├─ GlobalFilters (fixed)
-│  │     │  ├─ PriceFilter (compact)
+│  │     │  ├─ PriceSlider (compact, controlled by minPrice/maxPrice from LLM)
 │  │     │  └─ InStockFilter (compact)
 │  │     └─ PromptInput (fixed bottom)
 │  │        ├─ ImagePreview (if image attached)
@@ -600,11 +661,12 @@ ShopPage (page.tsx)
 - Placeholder text: "Search products..."
 - **UNCLEAR:** Should clicking it do anything? Or completely static?
 
-#### PriceQuestion
-- Rendered at the bottom of assistant messages (when present)
-- Example: "What's your budget?" or "Any price range in mind?"
-- Could be a clickable prompt or just text
-- **UNCLEAR:** Should this be interactive (quick buttons like "$0-50", "$50-100") or just a text prompt for the user to respond to?
+#### PriceSlider
+- Located in GlobalFilters section (always visible above prompt input)
+- Controlled by `minPrice` and `maxPrice` values extracted from LLM responses
+- Range inferred from user queries: "budget is $200" → $0 to $200, "minimum $200" → $200 to max
+- Updates automatically when LLM extracts price values from user messages
+- User can also manually adjust the slider, which sends updated prices in subsequent requests
 
 ## AI Integration: Multi-Prompt Architecture
 

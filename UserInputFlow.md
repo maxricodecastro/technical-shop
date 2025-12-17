@@ -51,7 +51,9 @@ This document details the complete flow from when a user types a message to when
   │  {                              │          │
   │    message: "Great choice!...", │          │
   │    chips: [...],                │          │
-  │    priceQuestion: "Budget?"     │          │
+  │    minPrice: null,              │          │
+  │    maxPrice: 200,                │          │
+  │    priceQuestion: null           │          │
   │  }                              │          │
   └─────────────┬───────────────────┘          │
                 │                              │
@@ -234,8 +236,9 @@ export async function POST(request: Request) {
 - Catalog facets are loaded (all valid colors, materials, etc.)
 - System prompt is built with available filter options
 - Conversation history is included for context
-- Groq LLM generates a response
+- Groq LLM generates a response with extracted price values (minPrice/maxPrice)
 - Response is validated with Zod
+- Extracted prices are applied to product filtering
 
 ---
 
@@ -293,8 +296,9 @@ export function parseAndValidateLLMResponse(
 - ✅ Material values exist in catalog
 - ✅ Style tags exist in catalog
 - ✅ Subcategories exist in catalog
+- ✅ `minPrice` and `maxPrice` are numbers or null (extracted from user query)
 
-**Note:** Color chips from LLM are removed during post-processing (colors are data-driven).
+**Note:** Color chips from LLM are removed during post-processing (colors are data-driven). Price values are extracted separately and control the price slider, not filter chips.
 
 ---
 
@@ -302,9 +306,41 @@ export function parseAndValidateLLMResponse(
 
 **Module:** `app/api/chat/route.ts` - `processChipsWithDerivedFacets()`
 
-After validation, chips are processed to add data-driven colors:
+After validation, chips are processed and price filters are applied:
 
 ```typescript
+// In /api/chat/route.ts
+
+// Extract price values from LLM response
+const llmMinPrice = validated.data?.minPrice ?? null
+const llmMaxPrice = validated.data?.maxPrice ?? null
+
+// Determine effective price range: LLM extraction overrides frontend state
+let effectiveMinPrice: number | null = null
+let effectiveMaxPrice: number | null = null
+
+if (llmMinPrice !== null) {
+  effectiveMinPrice = llmMinPrice
+} else if (currentPriceRange && !currentPriceRange.isDefault) {
+  effectiveMinPrice = currentPriceRange.min > 0 ? currentPriceRange.min : null
+}
+
+if (llmMaxPrice !== null) {
+  effectiveMaxPrice = llmMaxPrice
+} else if (currentPriceRange && !currentPriceRange.isDefault) {
+  effectiveMaxPrice = currentPriceRange.max < 275 ? currentPriceRange.max : null
+}
+
+// Apply effective price filters
+let productsToSearch = products
+if (effectiveMinPrice !== null) {
+  productsToSearch = productsToSearch.filter(p => p.price >= effectiveMinPrice)
+}
+if (effectiveMaxPrice !== null) {
+  productsToSearch = productsToSearch.filter(p => p.price <= effectiveMaxPrice)
+}
+
+// Then process chips with derived facets
 function processChipsWithDerivedFacets(llmChips, products) {
   // 1. Separate chips by type
   const subcategoryChips = llmChips.filter(c => c.type === 'subcategory')

@@ -6,15 +6,26 @@ import { Input } from '@/components/catalyst/input'
 import { Badge, BadgeButton } from '@/components/catalyst/badge'
 import { Heading, Subheading } from '@/components/catalyst/heading'
 import { Text, Strong, Code } from '@/components/catalyst/text'
-import { FilterChip, Product, Message } from '@/types'
+import { FilterChip, Product, Message, IntentMode, ReplaceCategory } from '@/types'
 
 interface TestResult {
   raw: string
   parsed?: { message: string; priceQuestion?: string } | null
   suggestedChips: FilterChip[]
+  intentMode: IntentMode
+  replaceCategories: ReplaceCategory[]
   invalid: FilterChip[]
   errors: string[]
   matchingProducts?: Product[]
+  minPrice?: number | null  // Extracted minimum price for slider
+  maxPrice?: number | null  // Extracted maximum price for slider
+  appliedFilters?: {        // State sync verification data
+    suggestedChipCount: number
+    effectiveMinPrice: number | null
+    effectiveMaxPrice: number | null
+    totalProductsBeforeFilter: number
+    totalProductsAfterFilter: number
+  }
 }
 
 export default function TestPage() {
@@ -30,10 +41,85 @@ export default function TestPage() {
   
   // Track conversation history for multi-turn context
   const [conversationHistory, setConversationHistory] = useState<Message[]>([])
+  
+  // Price range state - controlled by LLM extraction or manual adjustment
+  const CATALOG_MIN_PRICE = 0
+  const CATALOG_MAX_PRICE = 275
+  const [priceRange, setPriceRange] = useState<{ min: number; max: number }>({
+    min: CATALOG_MIN_PRICE,
+    max: CATALOG_MAX_PRICE,
+  })
 
   // Check if a chip is currently selected
   const isChipSelected = (chip: FilterChip) => {
     return selectedChips.some(c => c.filterValue === chip.filterValue && c.type === chip.type)
+  }
+
+  /**
+   * Handles intent mode from LLM response.
+   * Clears appropriate chips/state based on intentMode and replaceCategories.
+   * 
+   * @param intentMode - 'replace' | 'refine' | 'explore'
+   * @param replaceCategories - Categories to clear when intentMode is 'replace'
+   * @returns Updated selectedChips array
+   */
+  const handleIntentMode = (
+    intentMode: IntentMode,
+    replaceCategories: ReplaceCategory[]
+  ): FilterChip[] => {
+    // For 'refine' or 'explore', keep all existing state
+    if (intentMode !== 'replace') {
+      console.log('[DEBUG] Intent mode:', intentMode, '- keeping existing state')
+      return selectedChips
+    }
+
+    // For 'replace', check what categories to clear
+    console.log('[DEBUG] Intent mode: replace, categories to clear:', replaceCategories)
+
+    // If 'all' is in replaceCategories, clear everything INCLUDING price
+    if (replaceCategories.includes('all')) {
+      console.log('[DEBUG] Clearing ALL selected chips and resetting price')
+      setPriceRange({ min: CATALOG_MIN_PRICE, max: CATALOG_MAX_PRICE })
+      return []
+    }
+
+    // If 'all_except_price' is present, clear chips but NOT price
+    if (replaceCategories.includes('all_except_price')) {
+      console.log('[DEBUG] Clearing ALL chips but preserving price range')
+      return []
+    }
+
+    // If 'price' is explicitly in replaceCategories, reset price only (keep chips)
+    if (replaceCategories.includes('price')) {
+      console.log('[DEBUG] Resetting price range only, keeping chips')
+      setPriceRange({ min: CATALOG_MIN_PRICE, max: CATALOG_MAX_PRICE })
+      // Don't return early - continue to process other category clears if any
+    }
+
+    // Map replaceCategories to chip types
+    const categoryToChipType: Record<ReplaceCategory, string | null> = {
+      'all': null, // Handled above
+      'all_except_price': null, // Handled above
+      'subcategory': 'subcategory',
+      'occasions': 'occasion',
+      'materials': 'material',
+      'colors': 'color',
+      'style_tags': 'style_tag',
+      'sizes': 'size',
+      'price': null, // Handled above (price is not a chip)
+    }
+
+    // Filter out chips that match the categories being replaced
+    const typesToClear = replaceCategories
+      .map(cat => categoryToChipType[cat])
+      .filter((type): type is string => type !== null)
+
+    console.log('[DEBUG] Chip types to clear:', typesToClear)
+
+    const remainingChips = selectedChips.filter(chip => !typesToClear.includes(chip.type))
+    console.log('[DEBUG] Chips remaining after clear:', remainingChips.length)
+
+    return remainingChips
   }
 
   // Handle chip click - toggle selection
@@ -77,6 +163,11 @@ export default function TestPage() {
           message: input,
           conversationHistory: conversationHistory, // Pass full conversation context
           selectedChips: selectedChips, // Pass selected chips to avoid duplicates
+          currentPriceRange: {
+            min: priceRange.min,
+            max: priceRange.max,
+            isDefault: priceRange.min === CATALOG_MIN_PRICE && priceRange.max === CATALOG_MAX_PRICE,
+          },
         }),
       })
 
@@ -85,10 +176,67 @@ export default function TestPage() {
         throw new Error(errorData.error || 'API request failed')
       }
 
-      const data = await res.json()
+      const data = await res.json() as TestResult
       setResult(data)
-      // Update suggested chips with new response (selected chips stay)
+      
+      // Handle intent mode - clear appropriate chips based on LLM's intent detection
+      const intentMode = data.intentMode || 'refine'
+      const replaceCategories = data.replaceCategories || []
+      
+      console.log('[DEBUG] Received intentMode:', intentMode, 'replaceCategories:', replaceCategories)
+      
+      // Apply intent mode to update selected chips
+      const updatedSelectedChips = handleIntentMode(intentMode, replaceCategories)
+      setSelectedChips(updatedSelectedChips)
+      
+      // Update suggested chips with new response
       setSuggestedChips(data.suggestedChips || [])
+      
+      // Handle extracted price values - update slider with conflict resolution
+      const newMinPrice = data.minPrice ?? null
+      const newMaxPrice = data.maxPrice ?? null
+      
+      if (newMinPrice !== null || newMaxPrice !== null) {
+        setPriceRange(prev => {
+          let updatedMin = prev.min
+          let updatedMax = prev.max
+          
+          // Case 1: Both prices received from LLM
+          if (newMinPrice !== null && newMaxPrice !== null) {
+            if (newMinPrice > newMaxPrice) {
+              // Invalid range from LLM - ignore both
+              console.warn('[PRICE CONFLICT] LLM returned invalid range: min=', newMinPrice, '> max=', newMaxPrice, '- ignoring both')
+              return prev
+            }
+            // Valid range - apply both
+            updatedMin = newMinPrice
+            updatedMax = newMaxPrice
+            console.log('[DEBUG] Applied price range:', updatedMin, '-', updatedMax)
+          }
+          // Case 2: Only minPrice received
+          else if (newMinPrice !== null) {
+            // If new min > current max, reset max to catalog max
+            if (newMinPrice > prev.max) {
+              console.log('[PRICE CONFLICT] New minPrice', newMinPrice, '> current maxPrice', prev.max, '- resetting max to', CATALOG_MAX_PRICE)
+              updatedMax = CATALOG_MAX_PRICE
+            }
+            updatedMin = newMinPrice
+            console.log('[DEBUG] Updated minPrice to:', updatedMin, 'maxPrice:', updatedMax)
+          }
+          // Case 3: Only maxPrice received
+          else if (newMaxPrice !== null) {
+            // If new max < current min, reset min to catalog min
+            if (newMaxPrice < prev.min) {
+              console.log('[PRICE CONFLICT] New maxPrice', newMaxPrice, '< current minPrice', prev.min, '- resetting min to', CATALOG_MIN_PRICE)
+              updatedMin = CATALOG_MIN_PRICE
+            }
+            updatedMax = newMaxPrice
+            console.log('[DEBUG] Updated maxPrice to:', updatedMax, 'minPrice:', updatedMin)
+          }
+          
+          return { min: updatedMin, max: updatedMax }
+        })
+      }
 
       // Create assistant message for history
       const assistantMessage: Message = {
@@ -102,6 +250,27 @@ export default function TestPage() {
 
       // Add both messages to conversation history
       setConversationHistory(prev => [...prev, userMessage, assistantMessage])
+      
+      // State sync verification (dev mode only)
+      if (process.env.NODE_ENV === 'development' && data.appliedFilters) {
+        const frontendChipCount = selectedChips.length + (data.suggestedChips?.length || 0)
+        const backendChipCount = data.appliedFilters.suggestedChipCount
+        
+        if (frontendChipCount !== backendChipCount) {
+          console.warn('[STATE SYNC] Chip count mismatch:', {
+            frontend: frontendChipCount,
+            backend: backendChipCount,
+            selectedChips: selectedChips.length,
+            suggestedChips: data.suggestedChips?.length || 0,
+          })
+        }
+        
+        console.log('[FILTER STATE]', {
+          priceRange: `${data.appliedFilters.effectiveMinPrice ?? 0} - ${data.appliedFilters.effectiveMaxPrice ?? 275}`,
+          productsFiltered: `${data.appliedFilters.totalProductsBeforeFilter} → ${data.appliedFilters.totalProductsAfterFilter}`,
+          chips: backendChipCount,
+        })
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
       // Still add user message to history even on error (shows what they asked)
@@ -121,6 +290,7 @@ export default function TestPage() {
     setLastQuery('')
     setConversationHistory([]) // Clear conversation context
     setError(null)
+    setPriceRange({ min: CATALOG_MIN_PRICE, max: CATALOG_MAX_PRICE }) // Reset price
   }
 
   // Quick test queries
@@ -229,6 +399,113 @@ export default function TestPage() {
             {/* User Input */}
             <Section title="📥 USER INPUT" color="zinc">
               <Code className="text-base text-zinc-800">{lastQuery}</Code>
+            </Section>
+
+            {/* Intent Mode Display */}
+            <Section title="🎯 INTENT MODE" color="zinc">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Strong className="text-zinc-700">Mode:</Strong>
+                  <Badge 
+                    color={
+                      result.intentMode === 'replace' ? 'red' : 
+                      result.intentMode === 'explore' ? 'amber' : 
+                      'green'
+                    }
+                  >
+                    {result.intentMode || 'refine'}
+                  </Badge>
+                </div>
+                {result.intentMode === 'replace' && result.replaceCategories && result.replaceCategories.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Strong className="text-zinc-700">Clearing:</Strong>
+                    {result.replaceCategories.map((cat, i) => (
+                      <Badge key={i} color="red">{cat}</Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <Text className="mt-2 text-xs text-zinc-500">
+                {result.intentMode === 'replace' 
+                  ? 'User is changing preferences - clearing specified categories'
+                  : result.intentMode === 'explore'
+                  ? 'User wants alternatives - keeping existing state'
+                  : 'User is adding/refining - keeping existing state'}
+              </Text>
+            </Section>
+
+            {/* Price Range Display */}
+            <Section title="💰 PRICE RANGE" color="green">
+              <div className="space-y-4">
+                {/* Extracted prices from LLM */}
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Strong className="text-zinc-700">Extracted Min:</Strong>
+                    <Badge color={result.minPrice !== null && result.minPrice !== undefined ? 'emerald' : 'zinc'}>
+                      {result.minPrice !== null && result.minPrice !== undefined ? `$${result.minPrice}` : 'Not set'}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Strong className="text-zinc-700">Extracted Max:</Strong>
+                    <Badge color={result.maxPrice !== null && result.maxPrice !== undefined ? 'emerald' : 'zinc'}>
+                      {result.maxPrice !== null && result.maxPrice !== undefined ? `$${result.maxPrice}` : 'Not set'}
+                    </Badge>
+                  </div>
+                </div>
+                
+                {/* Current slider state */}
+                <div className="flex items-center gap-4">
+                  <Strong className="text-zinc-700">Current Range:</Strong>
+                  <Badge color="emerald">
+                    ${priceRange.min} - ${priceRange.max}
+                  </Badge>
+                  {(priceRange.min > CATALOG_MIN_PRICE || priceRange.max < CATALOG_MAX_PRICE) && (
+                    <Button 
+                      plain 
+                      className="text-xs text-zinc-500 hover:text-zinc-700"
+                      onClick={() => setPriceRange({ min: CATALOG_MIN_PRICE, max: CATALOG_MAX_PRICE })}
+                    >
+                      Reset to full range
+                    </Button>
+                  )}
+                </div>
+
+                {/* Simple slider controls */}
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Text className="text-sm text-zinc-600">Min: $</Text>
+                    <input
+                      type="number"
+                      min={CATALOG_MIN_PRICE}
+                      max={priceRange.max}
+                      value={priceRange.min}
+                      onChange={(e) => setPriceRange(prev => ({ 
+                        ...prev, 
+                        min: Math.min(Number(e.target.value), prev.max) 
+                      }))}
+                      className="w-20 rounded border border-zinc-300 px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Text className="text-sm text-zinc-600">Max: $</Text>
+                    <input
+                      type="number"
+                      min={priceRange.min}
+                      max={CATALOG_MAX_PRICE}
+                      value={priceRange.max}
+                      onChange={(e) => setPriceRange(prev => ({ 
+                        ...prev, 
+                        max: Math.max(Number(e.target.value), prev.min) 
+                      }))}
+                      className="w-20 rounded border border-zinc-300 px-2 py-1 text-sm"
+                    />
+                  </div>
+                </div>
+
+                <Text className="text-xs text-zinc-500">
+                  Catalog range: ${CATALOG_MIN_PRICE} - ${CATALOG_MAX_PRICE}
+                </Text>
+              </div>
             </Section>
 
             {/* Raw LLM Response */}

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { CatalogFacets, FilterChip, LLMResponse, ValidationResult, ChipType } from '@/types'
+import { CatalogFacets, FilterChip, LLMResponse, ValidationResult, ChipType, IntentMode, ReplaceCategory } from '@/types'
 
 // ============================================
 // ZOD SCHEMAS
@@ -18,12 +18,41 @@ const FilterChipSchema = z.object({
 })
 
 /**
+ * Schema for intent mode - how the user's request relates to existing state.
+ */
+const IntentModeSchema = z.enum(['replace', 'refine', 'explore'])
+
+/**
+ * Schema for replace categories - which categories to clear when replacing.
+ * - 'all': Clear everything INCLUDING price
+ * - 'all_except_price': Clear all chips but preserve price range
+ * - 'price': Clear only price (reset to full range)
+ */
+const ReplaceCategorySchema = z.enum([
+  'all',
+  'all_except_price',
+  'subcategory',
+  'occasions',
+  'materials',
+  'colors',
+  'style_tags',
+  'sizes',
+  'price'
+])
+
+/**
  * Schema for validating the complete LLM response structure.
+ * Includes intentMode and replaceCategories for state management.
+ * Includes minPrice/maxPrice for price slider control.
  */
 const LLMResponseSchema = z.object({
   message: z.string(),
+  intentMode: IntentModeSchema.optional(), // Optional - will default to 'refine'
+  replaceCategories: z.array(ReplaceCategorySchema).optional(), // Optional - will default to []
   chips: z.array(FilterChipSchema),
-  priceQuestion: z.string().optional()
+  priceQuestion: z.string().nullish(), // Can be string, null, or undefined
+  minPrice: z.number().nullish(), // Extracted minimum price from user query
+  maxPrice: z.number().nullish(), // Extracted maximum price from user query
 })
 
 // ============================================
@@ -61,7 +90,9 @@ export function validateLLMResponse(
         success: false,
         valid: [],
         invalid: [],
-        errors: [`Failed to parse JSON: ${e instanceof Error ? e.message : 'Unknown error'}`]
+        errors: [`Failed to parse JSON: ${e instanceof Error ? e.message : 'Unknown error'}`],
+        intentMode: 'refine' as IntentMode, // Default on failure
+        replaceCategories: [] as ReplaceCategory[]
       }
     }
   } else {
@@ -79,11 +110,25 @@ export function validateLLMResponse(
       success: false,
       valid: [],
       invalid: [],
-      errors: [`Schema validation failed: ${zodErrors.join(', ')}`]
+      errors: [`Schema validation failed: ${zodErrors.join(', ')}`],
+      intentMode: 'refine' as IntentMode, // Default on failure
+      replaceCategories: [] as ReplaceCategory[]
     }
   }
 
   const llmResponse = schemaResult.data
+  
+  // Extract intent mode with defaults
+  const intentMode: IntentMode = llmResponse.intentMode || 'refine'
+  
+  // Extract and validate replaceCategories
+  // If intentMode is not 'replace', force replaceCategories to empty
+  let replaceCategories: ReplaceCategory[] = []
+  if (intentMode === 'replace' && llmResponse.replaceCategories) {
+    replaceCategories = llmResponse.replaceCategories
+  }
+  
+  console.log('[DEBUG] Intent mode:', intentMode, 'Replace categories:', replaceCategories)
 
   // Step 3: Validate each chip against catalog facets
   const valid: FilterChip[] = []
@@ -104,12 +149,18 @@ export function validateLLMResponse(
     success: true,
     data: {
       message: llmResponse.message,
+      intentMode,
+      replaceCategories,
       chips: valid,
-      priceQuestion: llmResponse.priceQuestion
+      priceQuestion: llmResponse.priceQuestion ?? undefined,
+      minPrice: llmResponse.minPrice ?? null,
+      maxPrice: llmResponse.maxPrice ?? null,
     },
     valid,
     invalid,
-    errors
+    errors,
+    intentMode,
+    replaceCategories
   }
 }
 

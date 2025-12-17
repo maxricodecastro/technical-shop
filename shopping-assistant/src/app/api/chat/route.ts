@@ -6,7 +6,7 @@ import {
   findProductsMatchingAnyChip, 
   getColorsForSubcategories
 } from '@/lib/filters/engine'
-import { FilterChip, Message } from '@/types'
+import { FilterChip } from '@/types'
 import { ChatRequest, ChatResponse, Product, initialFilterState } from '@/types'
 import productsData from '@/data/products.json'
 
@@ -43,9 +43,10 @@ export async function POST(request: Request): Promise<Response> {
     // Parse request body
     console.log('[DEBUG] Parsing request body...')
     const body = await request.json() as ChatRequest
-    const { message, conversationHistory = [], currentFilters = initialFilterState, selectedChips = [] } = body
+    const { message, conversationHistory = [], currentFilters = initialFilterState, selectedChips = [], currentPriceRange } = body
     console.log('[DEBUG] Message received:', message)
     console.log('[DEBUG] Selected chips:', selectedChips.length)
+    console.log('[DEBUG] Current price range:', currentPriceRange)
 
     // Validate message
     if (!message || typeof message !== 'string' || !message.trim()) {
@@ -109,8 +110,8 @@ export async function POST(request: Request): Promise<Response> {
     console.log('[DEBUG] Validation complete - valid:', validated.valid.length, 'invalid:', validated.invalid.length)
 
     // Process chips: remove LLM-generated colors, add data-driven colors
-    // Pass user message to detect color intent (e.g., "bright colors", "earth tones")
-    let processedChips = processChipsWithDerivedFacets(validated.valid, products, message, conversationHistory)
+    // Note: Color intent is now handled by the LLM via intentMode/replaceCategories
+    const processedChips = processChipsWithDerivedFacets(validated.valid, products)
     console.log('[DEBUG] Processed chips:', processedChips.length)
 
     // Filter out any chips that are already selected (safety net - LLM might still suggest them)
@@ -119,6 +120,30 @@ export async function POST(request: Request): Promise<Response> {
       !selectedValues.has(String(chip.filterValue))
     )
     console.log('[DEBUG] After filtering selected, suggested chips:', suggestedChips.length)
+
+    // Extract price values from LLM response
+    const llmMinPrice = validated.data?.minPrice ?? null
+    const llmMaxPrice = validated.data?.maxPrice ?? null
+    console.log('[DEBUG] LLM extracted prices - minPrice:', llmMinPrice, 'maxPrice:', llmMaxPrice)
+
+    // Determine effective price range: LLM extraction overrides current range
+    // If LLM didn't extract price, use the frontend's current price range
+    let effectiveMinPrice: number | null = null
+    let effectiveMaxPrice: number | null = null
+    
+    if (llmMinPrice !== null) {
+      effectiveMinPrice = llmMinPrice
+    } else if (currentPriceRange && !currentPriceRange.isDefault) {
+      effectiveMinPrice = currentPriceRange.min > 0 ? currentPriceRange.min : null
+    }
+    
+    if (llmMaxPrice !== null) {
+      effectiveMaxPrice = llmMaxPrice
+    } else if (currentPriceRange && !currentPriceRange.isDefault) {
+      effectiveMaxPrice = currentPriceRange.max < 275 ? currentPriceRange.max : null
+    }
+    
+    console.log('[DEBUG] Effective prices - minPrice:', effectiveMinPrice, 'maxPrice:', effectiveMaxPrice)
 
     // Calculate matching products if we have valid chips
     // Occasion chips act as a HARD GATE - products must match at least one occasion
@@ -131,24 +156,49 @@ export async function POST(request: Request): Promise<Response> {
       
       if (occasionChips.length > 0) {
         const occasions = occasionChips.map(c => c.filterValue as string)
-        productsToSearch = products.filter(p => 
+        productsToSearch = productsToSearch.filter(p => 
           p.occasion.some(occ => occasions.includes(occ))
         )
         console.log('[DEBUG] Pre-filtered by occasions:', occasions, '→', productsToSearch.length, 'products')
       }
       
+      // Apply price filters (effective = LLM extraction or frontend state)
+      if (effectiveMinPrice !== null) {
+        productsToSearch = productsToSearch.filter(p => p.price >= effectiveMinPrice!)
+        console.log('[DEBUG] Filtered by minPrice:', effectiveMinPrice, '→', productsToSearch.length, 'products')
+      }
+      if (effectiveMaxPrice !== null) {
+        productsToSearch = productsToSearch.filter(p => p.price <= effectiveMaxPrice!)
+        console.log('[DEBUG] Filtered by maxPrice:', effectiveMaxPrice, '→', productsToSearch.length, 'products')
+      }
+      
       matchingProducts = findProductsMatchingAnyChip(productsToSearch, suggestedChips)
     }
 
-    // Build response
+    // Build response with state sync verification data
     const response: ChatResponse = {
       raw: rawResponse,
       parsed: validated.data || null,
       suggestedChips: suggestedChips,
+      intentMode: validated.intentMode,
+      replaceCategories: validated.replaceCategories,
       invalid: validated.invalid,
       errors: validated.errors,
       matchingProducts: matchingProducts.slice(0, 20), // Limit preview to 20 products
+      minPrice: llmMinPrice,  // LLM-extracted minimum price for slider update
+      maxPrice: llmMaxPrice,  // LLM-extracted maximum price for slider update
+      appliedFilters: {  // Echo what backend actually used for state sync verification
+        suggestedChipCount: suggestedChips.length,
+        effectiveMinPrice,
+        effectiveMaxPrice,
+        totalProductsBeforeFilter: products.length,
+        totalProductsAfterFilter: matchingProducts.length,
+      },
     }
+    
+    console.log('[DEBUG] Response intentMode:', validated.intentMode, 'replaceCategories:', validated.replaceCategories)
+    console.log('[DEBUG] Response prices - minPrice:', llmMinPrice, 'maxPrice:', llmMaxPrice)
+    console.log('[DEBUG] Applied filters:', response.appliedFilters)
 
     return Response.json(response)
 
@@ -172,6 +222,8 @@ export async function POST(request: Request): Promise<Response> {
           raw: '',
           parsed: null,
           suggestedChips: [],
+          intentMode: 'refine',
+          replaceCategories: [],
           invalid: [],
           errors: [`Groq API error: ${error.status} - ${error.message}`],
         } as ChatResponse,
@@ -188,6 +240,8 @@ export async function POST(request: Request): Promise<Response> {
           raw: '',
           parsed: null,
           suggestedChips: [],
+          intentMode: 'refine',
+          replaceCategories: [],
           invalid: [],
           errors: ['Failed to parse request body as JSON'],
         } as ChatResponse,
@@ -203,6 +257,8 @@ export async function POST(request: Request): Promise<Response> {
         raw: '',
         parsed: null,
         suggestedChips: [],
+        intentMode: 'refine',
+        replaceCategories: [],
         invalid: [],
         errors: [error instanceof Error ? error.message : 'Unknown error'],
       } as ChatResponse,
@@ -219,20 +275,17 @@ export async function POST(request: Request): Promise<Response> {
  * Processes LLM chips to:
  * 1. Remove any LLM-generated color chips (colors are data-driven)
  * 2. Add color chips derived from available products in suggested subcategories
- * 3. Filter colors by user intent if color family is mentioned (e.g., "bright colors", "earth tones")
- * 4. Keep LLM-generated occasions as-is (LLM is context-aware for activities)
- * 5. Keep LLM-generated materials as-is (no supplementation - LLM is context-aware)
- * 6. Keep LLM-generated style tags as-is (no supplementation - LLM is context-aware)
+ * 3. Keep LLM-generated occasions as-is (LLM is context-aware for activities)
+ * 4. Keep LLM-generated materials as-is (no supplementation - LLM is context-aware)
+ * 5. Keep LLM-generated style tags as-is (no supplementation - LLM is context-aware)
  * 
- * NOTE: Occasions, materials, and style tags are fully LLM-driven to ensure they match user intent.
- * For example, "running outfit" should only get athletic occasion and athletic materials (cotton, polyester),
- * not irrelevant ones (cashmere, silk) that might exist for the subcategories.
+ * NOTE: Color intent is now handled by the LLM via intentMode/replaceCategories.
+ * The old keyword-based color filtering has been removed in favor of the LLM's
+ * semantic understanding of user intent.
  */
 function processChipsWithDerivedFacets(
   llmChips: FilterChip[],
-  products: Product[],
-  currentMessage: string,
-  conversationHistory: Message[] = []
+  products: Product[]
 ): FilterChip[] {
   // Separate chips by type
   const subcategoryChips = llmChips.filter(c => c.type === 'subcategory')
@@ -251,15 +304,7 @@ function processChipsWithDerivedFacets(
   const subcategories = subcategoryChips.map(c => c.filterValue as string)
   
   // Derive colors from products matching the subcategories (fully data-driven)
-  let availableColors = getColorsForSubcategories(products, subcategories)
-  
-  // Detect color intent from conversation (check current message + recent history)
-  const colorIntent = detectColorIntent(currentMessage, conversationHistory)
-  if (colorIntent) {
-    // Filter colors to only include those matching the color intent
-    availableColors = filterColorsByIntent(availableColors, colorIntent)
-    console.log('[DEBUG] Color intent detected:', colorIntent, '→ filtered to', availableColors.length, 'colors')
-  }
+  const availableColors = getColorsForSubcategories(products, subcategories)
   
   const colorChips: FilterChip[] = availableColors.map(color => ({
     id: `chip-color-${color}`,
@@ -268,9 +313,6 @@ function processChipsWithDerivedFacets(
     filterKey: 'colors',
     filterValue: color,
   }))
-
-  // Occasions, materials, and style tags are fully LLM-driven (no catalog supplementation)
-  // This ensures suggestions are context-aware and relevant to the user's query
 
   // Combine all chips in order:
   // 1. Subcategories (LLM-driven)
@@ -294,60 +336,5 @@ function processChipsWithDerivedFacets(
  */
 function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1)
-}
-
-/**
- * Detects color intent from user message and conversation history.
- * Returns a color family keyword if detected, null otherwise.
- */
-function detectColorIntent(
-  currentMessage: string,
-  conversationHistory: Message[] = []
-): string | null {
-  // Combine current message with recent user messages (last 3 turns)
-  const recentUserMessages = conversationHistory
-    .filter(msg => msg.role === 'user')
-    .slice(-3)
-    .map(msg => msg.content.toLowerCase())
-  
-  const fullText = [currentMessage.toLowerCase(), ...recentUserMessages].join(' ')
-  
-  // Color family keywords (case-insensitive matching)
-  const colorFamilies: Record<string, string[]> = {
-    'earth tones': ['earth tones', 'earth tone', 'earthtone', 'earthy'],
-    'brights': ['bright colors', 'bright color', 'brights', 'bold colors', 'bold color', 'vivid colors', 'vivid color'],
-    'neutrals': ['neutrals', 'neutral colors', 'neutral color', 'neutral palette'],
-    'pastels': ['pastels', 'pastel colors', 'pastel color', 'soft colors', 'soft color'],
-    'dark': ['dark colors', 'dark color', 'moody colors', 'moody color', 'dark palette'],
-  }
-  
-  // Check for color family mentions
-  for (const [family, keywords] of Object.entries(colorFamilies)) {
-    if (keywords.some(keyword => fullText.includes(keyword))) {
-      return family
-    }
-  }
-  
-  return null
-}
-
-/**
- * Filters available colors to only include those matching the color intent.
- * Maps color families to actual catalog colors.
- */
-function filterColorsByIntent(availableColors: string[], intent: string): string[] {
-  // Map color families to actual catalog colors
-  const colorFamilyMap: Record<string, string[]> = {
-    'earth tones': ['brown', 'beige', 'olive', 'cream'],
-    'brights': ['red', 'pink', 'blue', 'green', 'yellow', 'orange'],
-    'neutrals': ['black', 'white', 'gray', 'beige', 'navy', 'cream'],
-    'pastels': ['pink', 'blue', 'green', 'yellow', 'cream'],
-    'dark': ['black', 'navy', 'gray'],
-  }
-  
-  const matchingColors = colorFamilyMap[intent] || []
-  
-  // Return only colors that are both available AND match the intent
-  return availableColors.filter(color => matchingColors.includes(color.toLowerCase()))
 }
 

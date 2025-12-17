@@ -139,6 +139,7 @@ The application is a product listing page with an AI-powered conversational shop
   - Materials: `amber`
   - Style tags: `violet`
   - Size: `sky`
+  - Price: `emerald` (for price slider section, not chips)
 
 #### Chip Persistence (Phase 2)
 - **Selected chips persist** across queries and jump to front of row
@@ -149,8 +150,14 @@ The application is a product listing page with an AI-powered conversational shop
 
 ### 7. Global Filters
 - Always visible above the prompt input box
-- Includes: Price range, In stock toggle, and other always-available filters
+- Includes: Price slider, In stock toggle, and other always-available filters
 - Fixed position (does not scroll with conversation)
+- **Price Slider:**
+  - Controlled by `minPrice` and `maxPrice` values extracted from LLM responses
+  - Range automatically updates when user mentions budget/price in queries
+  - Examples: "budget is $200" → slider adjusts to $0-$200, "minimum $200" → $200-max
+  - User can manually adjust slider, which sends updated prices in subsequent requests
+  - Price is NOT a filter chip - it's a separate slider component
 - Note: Future goal is to attach these to the top of the input box area
 
 ### 8. Prompt Input Box

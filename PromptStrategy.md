@@ -365,6 +365,26 @@ Catalog would have: [casual, fitted, modern, relaxed, formal, elegant, vintage, 
                                                        make sense for running
 ```
 
+### Price Extraction (LLM-Driven, Explicit Amounts Only)
+
+**Price is NOT a filter chip** - it's controlled via a slider component. The LLM extracts price values from user queries and returns them as `minPrice` and `maxPrice` fields.
+
+**CRITICAL: Only extract from EXPLICIT dollar amounts:**
+- **Max price patterns**: "budget is $X", "under $X", "up to $X" → `maxPrice: X`
+- **Min price patterns**: "at least $X", "minimum $X", "over $X" → `minPrice: X`
+- **Range patterns**: "between $X and $Y" → `minPrice: X, maxPrice: Y`
+- **No price mentioned**: `minPrice: null, maxPrice: null` + include `priceQuestion`
+
+**DO NOT infer price from subjective terms:**
+- "luxury", "premium", "high-end" → `minPrice: null, maxPrice: null`
+- "budget", "cheap", "affordable" → `minPrice: null, maxPrice: null`
+- "mid-range", "reasonable" → `minPrice: null, maxPrice: null`
+
+**Example:** "I want luxury sweaters" → NO price extraction (luxury is subjective)
+**Example:** "Premium coats at least $200" → `minPrice: 200` (explicit $200 mentioned)
+
+The extracted prices are applied directly to product filtering and update the price slider range.
+
 ### Summary: What's LLM-Driven vs Data-Driven
 
 | Chip Type | Source | Rationale |
@@ -374,6 +394,7 @@ Catalog would have: [casual, fitted, modern, relaxed, formal, elegant, vintage, 
 | Style Tags | LLM | Context-dependent (what styles match the aesthetic/occasion) |
 | Colors | Data | Objective (what colors actually exist for the subcategories) |
 | Sizes | LLM | Context-dependent (user might specify size preferences) |
+| Price | LLM | Extracted from user queries, controls slider (not a chip) |
 
 ### Example: Full Processing Pipeline
 
@@ -508,8 +529,23 @@ RESPONSE FORMAT (JSON only)
     { "type": "subcategory", "label": "Sweaters", "filterKey": "subcategory", "filterValue": "sweaters" },
     { "type": "color", "label": "Blue", "filterKey": "colors", "filterValue": "blue" }
   ],
-  "priceQuestion": "What's your budget?" // Include if user hasn't mentioned price
+  "minPrice": null,
+  "maxPrice": 200,
+  "priceQuestion": null
 }
+
+REQUIRED FIELDS:
+- "message": string (brief, friendly response)
+- "chips": array of filter chips
+- "minPrice": number or null (extracted minimum price)
+- "maxPrice": number or null (extracted maximum price)
+- "priceQuestion": string or null (ask about budget if not mentioned)
+
+PRICE LOGIC:
+- If user mentions budget/max → set maxPrice, leave priceQuestion null
+- If user mentions minimum → set minPrice, leave priceQuestion null
+- If user mentions range → set both minPrice and maxPrice
+- If NO price mentioned → set both to null, include priceQuestion
 
 Respond with valid JSON only. No markdown, no explanation outside JSON.`
 }

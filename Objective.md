@@ -133,3 +133,15 @@ All assistant suggestions (chips and explanations) must map to these fields.
 - **Chip persistence** - Selected chips persist across queries, unselected refresh
 - **Gender-aware filtering** - Celebrity queries respect gender context
 
+### Implemented (Price Slider)
+- **Price extraction** - LLM extracts price values from user queries (minPrice/maxPrice)
+- **Price slider** - Price controlled via slider component, not filter chips
+- **Automatic range inference** - "budget is $200" → $0-$200, "minimum $200" → $200-max
+
+### Implemented (Price & State Sync)
+- **Explicit price only** - LLM only extracts from dollar amounts, not subjective terms like "luxury"
+- **Price conflict resolution** - Frontend resolves conflicting min/max constraints
+- **Price reset control** - New `all_except_price` and `price` replace categories for granular control
+- **Manual slider → API** - Frontend sends current price range, LLM extraction overrides manual adjustments
+- **State sync verification** - API echoes `appliedFilters` for debugging, frontend logs mismatches in dev mode
+

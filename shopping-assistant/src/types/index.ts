@@ -85,13 +85,47 @@ export interface CatalogFacets {
 }
 
 // ============================================
+// INTENT MODE TYPES
+// ============================================
+
+/**
+ * Intent mode indicates how the user's request relates to existing state.
+ * - "replace": User wants to change/switch preferences (clear specified categories)
+ * - "refine": User wants to add/narrow down (keep existing state)
+ * - "explore": User wants alternatives without committing (keep state, show variety)
+ */
+export type IntentMode = 'replace' | 'refine' | 'explore'
+
+/**
+ * Categories that can be selectively replaced when intentMode is "replace".
+ * - "all": Clear everything INCLUDING price
+ * - "all_except_price": Clear all chips but preserve price range
+ * - Individual categories: Clear only that category
+ * - "price": Clear only price (reset to full range)
+ */
+export type ReplaceCategory =
+  | 'all'
+  | 'all_except_price'
+  | 'subcategory'
+  | 'occasions'
+  | 'materials'
+  | 'colors'
+  | 'style_tags'
+  | 'sizes'
+  | 'price'
+
+// ============================================
 // LLM RESPONSE TYPES
 // ============================================
 
 export interface LLMResponse {
   message: string
+  intentMode: IntentMode
+  replaceCategories: ReplaceCategory[]
   chips: FilterChip[]
   priceQuestion?: string
+  minPrice?: number | null  // Extracted minimum price from user query
+  maxPrice?: number | null  // Extracted maximum price from user query
 }
 
 export interface LLMRegenerateResponse {
@@ -117,6 +151,8 @@ export interface ValidationResult {
   valid: FilterChip[]
   invalid: FilterChip[]
   errors: string[]
+  intentMode: IntentMode
+  replaceCategories: ReplaceCategory[]
 }
 
 // ============================================
@@ -128,15 +164,31 @@ export interface ChatRequest {
   conversationHistory?: Message[]
   currentFilters?: FilterState
   selectedChips?: FilterChip[]      // Chips user has selected (don't suggest duplicates)
+  currentPriceRange?: {             // Current price slider state (manual or LLM-set)
+    min: number
+    max: number
+    isDefault: boolean              // True if price range hasn't been modified
+  }
 }
 
 export interface ChatResponse {
   raw: string
   parsed: LLMResponse | null
   suggestedChips: FilterChip[]      // NEW chips only (excludes already-selected)
+  intentMode: IntentMode            // How to handle existing state
+  replaceCategories: ReplaceCategory[]  // Which categories to clear (if intentMode is "replace")
   invalid: FilterChip[]
   errors: string[]
   matchingProducts?: Product[]
+  minPrice?: number | null          // Extracted minimum price for slider
+  maxPrice?: number | null          // Extracted maximum price for slider
+  appliedFilters?: {                // Echo what backend actually used (for state sync verification)
+    suggestedChipCount: number
+    effectiveMinPrice: number | null
+    effectiveMaxPrice: number | null
+    totalProductsBeforeFilter: number
+    totalProductsAfterFilter: number
+  }
 }
 
 // ============================================
