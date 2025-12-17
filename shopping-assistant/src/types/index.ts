@@ -14,6 +14,7 @@ export interface Product {
   color: string
   material: string
   style_tags: string[]
+  occasion: string[]  // e.g., ["athletic", "casual", "lounge"]
   size: string
 }
 
@@ -30,6 +31,7 @@ export interface FilterState {
   maxPrice: number | null
   inStock: boolean | null
   styleTags: string[]
+  occasions: string[]  // e.g., ["athletic", "professional"]
 }
 
 export const initialFilterState: FilterState = {
@@ -41,6 +43,7 @@ export const initialFilterState: FilterState = {
   maxPrice: null,
   inStock: null,
   styleTags: [],
+  occasions: [],
 }
 
 // ============================================
@@ -49,6 +52,7 @@ export const initialFilterState: FilterState = {
 
 export type ChipType =
   | 'subcategory'
+  | 'occasion'
   | 'color'
   | 'material'
   | 'style_tag'
@@ -69,6 +73,7 @@ export interface FilterChip {
 
 export interface CatalogFacets {
   subcategories: string[]
+  occasions: string[]  // athletic, outdoor, professional, formal, casual, lounge, date, travel
   colors: string[]
   materials: string[]
   styleTags: string[]
@@ -122,12 +127,13 @@ export interface ChatRequest {
   message: string
   conversationHistory?: Message[]
   currentFilters?: FilterState
+  selectedChips?: FilterChip[]      // Chips user has selected (don't suggest duplicates)
 }
 
 export interface ChatResponse {
   raw: string
   parsed: LLMResponse | null
-  validated: FilterChip[]
+  suggestedChips: FilterChip[]      // NEW chips only (excludes already-selected)
   invalid: FilterChip[]
   errors: string[]
   matchingProducts?: Product[]

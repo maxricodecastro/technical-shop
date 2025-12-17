@@ -298,24 +298,24 @@ export function parseAndValidateLLMResponse(
 
 ---
 
-### Step 4.5: Data-Driven Chip Processing
+### Step 4.5: Data-Driven Colors + LLM-Driven Materials/Styles
 
 **Module:** `app/api/chat/route.ts` - `processChipsWithDerivedFacets()`
 
-After validation, chips are processed to add data-driven facets:
+After validation, chips are processed to add data-driven colors:
 
 ```typescript
 function processChipsWithDerivedFacets(llmChips, products) {
   // 1. Separate chips by type
   const subcategoryChips = llmChips.filter(c => c.type === 'subcategory')
-  const materialChips = llmChips.filter(c => c.type === 'material')
-  const styleChips = llmChips.filter(c => c.type === 'style_tag')
-  // Remove any color chips LLM might have generated
+  const materialChips = llmChips.filter(c => c.type === 'material')  // LLM materials (context-aware)
+  const styleChips = llmChips.filter(c => c.type === 'style_tag')    // LLM style tags (context-aware)
+  // Remove any color chips LLM might have generated (colors are data-driven)
   
   // 2. Get subcategory values
   const subcategories = subcategoryChips.map(c => c.filterValue)
   
-  // 3. Derive colors from products in those subcategories
+  // 3. Derive colors from catalog (fully data-driven)
   const availableColors = getColorsForSubcategories(products, subcategories)
   const colorChips = availableColors.map(color => ({
     id: `chip-color-${color}`,
@@ -325,33 +325,80 @@ function processChipsWithDerivedFacets(llmChips, products) {
     filterValue: color,
   }))
   
-  // 4. Supplement materials with what's available
-  const availableMaterials = getMaterialsForSubcategories(products, subcategories)
-  const additionalMaterialChips = availableMaterials
-    .filter(m => !llmMaterialValues.has(m))
-    .map(...)
+  // 4. Materials: LLM-only (no supplementation)
+  // LLM is context-aware and only suggests relevant materials
+  // e.g., "running" → cotton, polyester (NOT cashmere, silk)
   
-  // 5. Return combined chips
-  return [...subcategoryChips, ...materialChips, ...additionalMaterialChips, 
-          ...colorChips, ...styleChips]
+  // 5. Style tags: LLM-only (no supplementation)
+  // LLM is context-aware and only suggests relevant styles
+  // e.g., "running" → casual, fitted (NOT formal, elegant)
+  
+  // 6. Return chips in order:
+  //    subcategories → materials (LLM-only) → colors (data-driven) → styles (LLM-only)
+  return [
+    ...subcategoryChips,  // LLM-driven
+    ...materialChips,     // LLM-driven (context-aware, no supplements)
+    ...colorChips,        // Data-driven from catalog
+    ...styleChips,        // LLM-driven (context-aware, no supplements)
+  ]
 }
 ```
 
 **Why data-driven colors?**
+- Colors are objective - a product IS a certain color
 - Colors are derived from actual products in suggested subcategories
 - Prevents suggesting colors that don't exist for those product types
-- If user selects "hoodies + pink" and no pink hoodies exist → clear feedback
 
-**Example LLM Response:**
+**Why LLM-only for materials (no supplementation)?**
+- Materials are context-dependent: cashmere is valid for "cozy" but NOT for "running"
+- LLM understands user intent and only suggests relevant materials
+- Supplementation was adding irrelevant options (e.g., cashmere for athletic wear)
+
+**Why LLM-only for style tags (no supplementation)?**
+- Style tags are context-dependent: formal makes sense for "work" but NOT for "running"
+- LLM understands user intent and only suggests relevant styles
+- Supplementation was adding irrelevant options (e.g., elegant for athletic wear)
+
+**Example - Before and After Processing:**
+
+LLM Response for "running outfit" (before processing):
 ```json
 {
-  "message": "Looking for a cozy blue sweater! Here are some filters to help narrow down your options:",
+  "message": "Looking for running gear! Here are some options:",
   "chips": [
-    { "type": "subcategory", "label": "Sweaters", "filterKey": "subcategory", "filterValue": "sweaters" },
-    { "type": "color", "label": "Blue", "filterKey": "colors", "filterValue": "blue" },
-    { "type": "style_tag", "label": "Cozy", "filterKey": "styleTags", "filterValue": "cozy" }
-  ],
-  "priceQuestion": "What's your budget for the sweater?"
+    { "type": "subcategory", "filterValue": "t-shirts" },
+    { "type": "subcategory", "filterValue": "pants" },
+    { "type": "material", "filterValue": "cotton" },
+    { "type": "material", "filterValue": "polyester" },
+    { "type": "style_tag", "filterValue": "casual" },
+    { "type": "style_tag", "filterValue": "fitted" }
+  ]
+}
+```
+
+After Processing (final chip order):
+```json
+{
+  "chips": [
+    // Subcategories (LLM-driven)
+    { "type": "subcategory", "filterValue": "t-shirts" },
+    { "type": "subcategory", "filterValue": "pants" },
+    
+    // Materials: LLM-only (context-aware - only athletic fabrics)
+    { "type": "material", "filterValue": "cotton" },
+    { "type": "material", "filterValue": "polyester" },
+    // NO cashmere, silk, leather - irrelevant for running
+    
+    // Colors: data-driven from catalog
+    { "type": "color", "filterValue": "black" },
+    { "type": "color", "filterValue": "gray" },
+    { "type": "color", "filterValue": "white" },
+    
+    // Style tags: LLM-only (context-aware - only athletic styles)
+    { "type": "style_tag", "filterValue": "casual" },
+    { "type": "style_tag", "filterValue": "fitted" }
+    // NO formal, elegant, vintage - irrelevant for running
+  ]
 }
 ```
 
@@ -672,4 +719,55 @@ User can retry
 4. **Ranked results** - Products sorted by match score, best first
 5. **Optimistic UI** - Grid updates immediately on chip click
 6. **Error resilient** - Multiple fallback paths for different error types
+
+---
+
+## Phase 2: Chip Persistence Flow
+
+When user sends a follow-up query with chips already selected:
+
+```
+User has: [Jeans ✓] [Casual ✓] selected
+User types: "more baggy stuff"
+                    │
+                    ▼
+            ┌───────────────┐
+            │  API Request  │
+            │  includes:    │
+            │  - message    │
+            │  - selectedChips: [Jeans, Casual]
+            └───────┬───────┘
+                    │
+                    ▼
+            ┌───────────────┐
+            │  Prompt built │
+            │  with:        │
+            │  ALREADY SELECTED:
+            │  - jeans      │
+            │  - casual     │
+            │  DO NOT SUGGEST THESE
+            └───────┬───────┘
+                    │
+                    ▼
+            ┌───────────────┐
+            │  LLM Response │
+            │  chips: [Oversized, Relaxed, Hoodies]
+            │  (no Jeans/Casual - excluded)
+            └───────┬───────┘
+                    │
+                    ▼
+            ┌───────────────┐
+            │  API filters  │
+            │  duplicates   │
+            │  (safety net) │
+            └───────┬───────┘
+                    │
+                    ▼
+            ┌───────────────┐
+            │  Frontend     │
+            │  merges:      │
+            │  [Jeans ✓] [Casual ✓] | [Oversized] [Relaxed]
+            │  ← persist      ← new suggestions
+            └───────────────┘
+```
 

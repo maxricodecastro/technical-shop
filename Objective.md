@@ -129,3 +129,7 @@ All assistant suggestions (chips and explanations) must map to these fields.
 - Personality tuning
 - Additional verticals beyond apparel + furniture
 
+### Implemented (Phase 2)
+- **Chip persistence** - Selected chips persist across queries, unselected refresh
+- **Gender-aware filtering** - Celebrity queries respect gender context
+

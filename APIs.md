@@ -130,7 +130,7 @@ export async function POST(request: Request) {
 |-----------|-------|-------|
 | `model` | `llama-3.3-70b-versatile` | Best balance of speed and capability |
 | `temperature` | `0.7` (chat), `0.9` (regenerate) | Higher for more variety |
-| `max_tokens` | `1024` | Enough for JSON response with 10 chips |
+| `max_tokens` | `1024` | Enough for JSON response with 15-20 chips |
 
 ### Rate Limits
 
@@ -320,6 +320,49 @@ OpenAI has tiered rate limits based on usage:
 | `/api/regenerate` | Groq | llama-3.3-70b-versatile | Alternative filter suggestions |
 | `/api/vision` | OpenAI | gpt-4o | Describe uploaded image |
 | `/api/similar` | Groq | llama-3.3-70b-versatile | Suggest alternatives for zero results |
+
+### `/api/chat` Request/Response (Phase 2)
+
+**Request:**
+```typescript
+interface ChatRequest {
+  message: string
+  conversationHistory?: Message[]
+  currentFilters?: FilterState
+  selectedChips?: FilterChip[]  // Chips user has selected (won't be re-suggested)
+}
+```
+
+**Response:**
+```typescript
+interface ChatResponse {
+  raw: string
+  parsed: LLMResponse | null
+  suggestedChips: FilterChip[]  // NEW chips only (excludes selectedChips)
+  invalid: FilterChip[]
+  errors: string[]
+  matchingProducts?: Product[]  // Pre-filtered by occasion, then OR logic for other chips
+}
+```
+
+The API filters out any chips that match `selectedChips` values, ensuring no duplicates.
+
+**Matching Products Logic:**
+- If occasion chips are present, products are pre-filtered to only those matching at least one occasion (hard gate)
+- Then OR logic applies for other chips within that filtered set
+- This ensures queries like "running outfit" only show athletic products, not casual pants that happen to match a subcategory
+
+### Chip Post-Processing (in `/api/chat`)
+
+After the LLM response is validated, chips are post-processed:
+
+1. **Colors:** Fully data-driven - LLM color chips are removed, colors are derived from products in suggested subcategories
+2. **Materials:** LLM-first + supplemented - LLM material suggestions appear first, then additional materials from the catalog are appended
+3. **Style Tags:** LLM-first + supplemented - LLM style tag suggestions appear first, then additional style tags from the catalog are appended
+
+**Final chip order:** Subcategories → Occasions (LLM-driven) → Materials (LLM-driven) → Colors (data-driven) → Style tags (LLM-driven)
+
+> **Note:** Multiple occasion chips can be returned for queries like "travel and outdoor activities" → [travel, outdoor]. Occasions use OR logic between them (product must match at least one), but act as a hard gate before other chip filtering.
 
 ---
 

@@ -36,7 +36,24 @@ This document outlines the technical architecture for the AI Shopping Assistant.
 
 ## Core Concept: LLM as Filter Translator
 
-Instead of using embeddings and semantic search, we use the LLM directly to translate user intent into filters:
+Instead of using embeddings and semantic search, we use the LLM directly to translate user intent into filters.
+
+### Chip Persistence (Phase 2)
+
+Selected chips persist across queries while unselected chips refresh:
+
+```
+Query 1: "Jacob Elordi style"
+→ Chips: [T-shirts] [Jeans] [Casual] [Denim]...
+→ User selects: [Jeans ✓] [Casual ✓]
+
+Query 2: "more baggy stuff"  
+→ API receives: selectedChips = [Jeans, Casual]
+→ LLM excludes these from suggestions
+→ Response: [Oversized] [Relaxed] [Hoodies]... (no Jeans/Casual)
+→ UI shows: [Jeans ✓] [Casual ✓] | [Oversized] [Relaxed] [Hoodies]...
+            ← selected (persist)   ← new suggestions (replace old)
+```
 
 ```
 User: "I want a cozy sweater for winter, maybe in earth tones"
@@ -59,11 +76,12 @@ User: "I want a cozy sweater for winter, maybe in earth tones"
   "priceQuestion": "What's your budget for the sweater?"
 }
              │
-             ▼ (System adds data-driven colors + supplements materials)
-Final chips include:
-  - LLM-generated: subcategory, material, style chips
-  - Data-derived: colors available for "sweaters" in catalog
-  - Supplemented: additional materials found in "sweaters"
+             ▼ (System post-processes chips)
+Final chip order:
+  1. Subcategories (from LLM)
+  2. Materials: [LLM-suggested first] + [catalog supplements]
+  3. Colors: fully derived from catalog for subcategories
+  4. Style tags (from LLM)
 ```
 
 ### Data-Driven Colors
@@ -76,6 +94,48 @@ Final chips include:
 4. Color chips are added automatically
 
 This ensures users only see colors that actually exist for the suggested product types.
+
+### LLM-Driven Materials (No Supplementation)
+
+**Materials are fully LLM-driven** - no catalog supplementation.
+
+1. LLM generates material suggestions based on user intent
+2. System validates LLM materials against catalog (invalid ones are removed)
+3. Only LLM-suggested materials are returned (no catalog additions)
+
+**Why no supplementation?**
+- Materials are context-dependent: cashmere makes sense for "cozy" but NOT for "running"
+- Supplementation was adding irrelevant materials that confused users
+- LLM understands context better than a simple "get all materials" query
+
+**Example:**
+```
+User: "running outfit"
+LLM suggests: [cotton, polyester, fleece]  ← Context-appropriate
+Catalog has: [cotton, polyester, fleece, cashmere, silk, leather, linen, denim, wool]
+Result: [cotton, polyester, fleece]  ← Only relevant fabrics
+```
+
+### LLM-Driven Style Tags (No Supplementation)
+
+**Style tags are fully LLM-driven** - no catalog supplementation.
+
+1. LLM generates style tag suggestions based on user intent
+2. System validates LLM style tags against catalog (invalid ones are removed)
+3. Only LLM-suggested style tags are returned (no catalog additions)
+
+**Why no supplementation?**
+- Style tags are context-dependent: formal makes sense for "work" but NOT for "running"
+- Supplementation was adding irrelevant styles that confused users
+- LLM understands context better than a simple "get all styles" query
+
+**Example:**
+```
+User: "running outfit"
+LLM suggests: [casual, fitted, modern, relaxed]  ← Context-appropriate
+Catalog has: [casual, classic, cozy, edgy, elegant, fitted, formal, minimalist, modern, oversized, relaxed, romantic, vintage]
+Result: [casual, fitted, modern, relaxed]  ← Only relevant styles
+```
 
 ## Project Structure
 
@@ -1019,7 +1079,26 @@ export function applyFilters(products: Product[], filters: FilterState): Product
 
 ### OR Logic for Preview (suggested chips)
 
-When showing a preview of products for suggested chips, we use OR logic - products matching ANY chip are shown, ranked by match count:
+When showing a preview of products for suggested chips, we use a two-phase approach:
+
+**Phase 1: Occasion Pre-Filter (Hard Gate)**
+If occasion chips are present, products MUST match at least one occasion. This ensures activity-based queries like "running" only show athletic products.
+
+```typescript
+// In /api/chat route
+const occasionChips = suggestedChips.filter(c => c.type === 'occasion')
+let productsToSearch = products
+
+if (occasionChips.length > 0) {
+  const occasions = occasionChips.map(c => c.filterValue as string)
+  productsToSearch = products.filter(p => 
+    p.occasion.some(occ => occasions.includes(occ))
+  )
+}
+```
+
+**Phase 2: OR Logic for Other Chips**
+Within the occasion-filtered set, OR logic applies - products matching ANY remaining chip are shown, ranked by match count:
 
 ```typescript
 export function findProductsMatchingAnyChip(products: Product[], chips: FilterChip[]): Product[] {
@@ -1039,10 +1118,10 @@ export function findProductsMatchingAnyChip(products: Product[], chips: FilterCh
 
 ### Data-Driven Facet Functions
 
-Colors and materials can be derived from products matching specific subcategories:
+Colors are fully derived from the catalog. Materials are supplemented (LLM suggestions first, then catalog additions).
 
 ```typescript
-// Get all colors available for given subcategories
+// Get all colors available for given subcategories (fully data-driven)
 export function getColorsForSubcategories(products: Product[], subcategories: string[]): string[] {
   const colors = new Set<string>()
   for (const product of products) {
@@ -1053,7 +1132,7 @@ export function getColorsForSubcategories(products: Product[], subcategories: st
   return Array.from(colors).sort()
 }
 
-// Get all materials available for given subcategories  
+// Get all materials available for given subcategories (used to supplement LLM suggestions)
 export function getMaterialsForSubcategories(products: Product[], subcategories: string[]): string[] {
   const materials = new Set<string>()
   for (const product of products) {
@@ -1062,6 +1141,43 @@ export function getMaterialsForSubcategories(products: Product[], subcategories:
     }
   }
   return Array.from(materials).sort()
+}
+```
+
+### Chip Processing Flow
+
+```typescript
+// In /api/chat/route.ts - processChipsWithDerivedFacets()
+
+function processChipsWithDerivedFacets(llmChips, products) {
+  // 1. Separate chips by type
+  const subcategoryChips = llmChips.filter(c => c.type === 'subcategory')
+  const materialChips = llmChips.filter(c => c.type === 'material')  // LLM materials (context-aware)
+  const styleChips = llmChips.filter(c => c.type === 'style_tag')    // LLM style tags (context-aware)
+  // Remove any LLM color chips (colors are data-driven)
+  
+  // 2. Get subcategory values
+  const subcategories = subcategoryChips.map(c => c.filterValue)
+  
+  // 3. Derive colors from catalog (fully data-driven)
+  const availableColors = getColorsForSubcategories(products, subcategories)
+  const colorChips = availableColors.map(color => createColorChip(color))
+  
+  // 4. Materials: LLM-only (no supplementation)
+  // LLM is context-aware and only suggests relevant materials
+  // e.g., "running" → cotton, polyester (NOT cashmere, silk)
+  
+  // 5. Style tags: LLM-only (no supplementation)
+  // LLM is context-aware and only suggests relevant styles
+  // e.g., "running" → casual, fitted (NOT formal, elegant)
+  
+  // 6. Return in order: subcategories, materials (LLM-only), colors (data-driven), styles (LLM-only)
+  return [
+    ...subcategoryChips,  // LLM-driven
+    ...materialChips,     // LLM-driven (context-aware, no supplements)
+    ...colorChips,        // Data-driven (from catalog)
+    ...styleChips,        // LLM-driven (context-aware, no supplements)
+  ]
 }
 ```
 

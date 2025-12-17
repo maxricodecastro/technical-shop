@@ -26,3 +26,4 @@ export function Subheading({ className, level = 2, ...props }: HeadingProps) {
   )
 }
 
+

@@ -4,10 +4,9 @@ import { validateLLMResponse } from '@/lib/ai/validate'
 import { getCatalogFacets } from '@/lib/catalog/facets'
 import { 
   findProductsMatchingAnyChip, 
-  getColorsForSubcategories,
-  getMaterialsForSubcategories 
+  getColorsForSubcategories
 } from '@/lib/filters/engine'
-import { FilterChip } from '@/types'
+import { FilterChip, Message } from '@/types'
 import { ChatRequest, ChatResponse, Product, initialFilterState } from '@/types'
 import productsData from '@/data/products.json'
 
@@ -44,8 +43,9 @@ export async function POST(request: Request): Promise<Response> {
     // Parse request body
     console.log('[DEBUG] Parsing request body...')
     const body = await request.json() as ChatRequest
-    const { message, conversationHistory = [], currentFilters = initialFilterState } = body
+    const { message, conversationHistory = [], currentFilters = initialFilterState, selectedChips = [] } = body
     console.log('[DEBUG] Message received:', message)
+    console.log('[DEBUG] Selected chips:', selectedChips.length)
 
     // Validate message
     if (!message || typeof message !== 'string' || !message.trim()) {
@@ -61,9 +61,9 @@ export async function POST(request: Request): Promise<Response> {
     const facets = getCatalogFacets(products)
     console.log('[DEBUG] Facets retrieved - colors:', facets.colors.length, 'materials:', facets.materials.length)
 
-    // Build the system prompt with available filters
+    // Build the system prompt with available filters and selected chips (to avoid duplicates)
     console.log('[DEBUG] Building system prompt...')
-    const systemPrompt = buildFilterPrompt(facets, currentFilters)
+    const systemPrompt = buildFilterPrompt(facets, currentFilters, selectedChips)
     console.log('[DEBUG] System prompt length:', systemPrompt.length)
 
     // Prepare conversation history for LLM
@@ -109,22 +109,42 @@ export async function POST(request: Request): Promise<Response> {
     console.log('[DEBUG] Validation complete - valid:', validated.valid.length, 'invalid:', validated.invalid.length)
 
     // Process chips: remove LLM-generated colors, add data-driven colors
-    let processedChips = processChipsWithDerivedFacets(validated.valid, products)
+    // Pass user message to detect color intent (e.g., "bright colors", "earth tones")
+    let processedChips = processChipsWithDerivedFacets(validated.valid, products, message, conversationHistory)
     console.log('[DEBUG] Processed chips:', processedChips.length)
 
+    // Filter out any chips that are already selected (safety net - LLM might still suggest them)
+    const selectedValues = new Set(selectedChips.map(c => String(c.filterValue)))
+    const suggestedChips = processedChips.filter(chip => 
+      !selectedValues.has(String(chip.filterValue))
+    )
+    console.log('[DEBUG] After filtering selected, suggested chips:', suggestedChips.length)
+
     // Calculate matching products if we have valid chips
-    // Use OR logic - show products that match ANY of the suggested chips
-    // This gives a better preview of what the user could find
+    // Occasion chips act as a HARD GATE - products must match at least one occasion
+    // Then OR logic applies for other chip types within the filtered set
     let matchingProducts: Product[] = []
-    if (processedChips.length > 0) {
-      matchingProducts = findProductsMatchingAnyChip(products, processedChips)
+    if (suggestedChips.length > 0) {
+      // Pre-filter by occasion: if occasion chips exist, products MUST match at least one
+      const occasionChips = suggestedChips.filter(c => c.type === 'occasion')
+      let productsToSearch = products
+      
+      if (occasionChips.length > 0) {
+        const occasions = occasionChips.map(c => c.filterValue as string)
+        productsToSearch = products.filter(p => 
+          p.occasion.some(occ => occasions.includes(occ))
+        )
+        console.log('[DEBUG] Pre-filtered by occasions:', occasions, '→', productsToSearch.length, 'products')
+      }
+      
+      matchingProducts = findProductsMatchingAnyChip(productsToSearch, suggestedChips)
     }
 
     // Build response
     const response: ChatResponse = {
       raw: rawResponse,
       parsed: validated.data || null,
-      validated: processedChips,
+      suggestedChips: suggestedChips,
       invalid: validated.invalid,
       errors: validated.errors,
       matchingProducts: matchingProducts.slice(0, 20), // Limit preview to 20 products
@@ -151,7 +171,7 @@ export async function POST(request: Request): Promise<Response> {
           message: error.message,
           raw: '',
           parsed: null,
-          validated: [],
+          suggestedChips: [],
           invalid: [],
           errors: [`Groq API error: ${error.status} - ${error.message}`],
         } as ChatResponse,
@@ -167,7 +187,7 @@ export async function POST(request: Request): Promise<Response> {
           error: 'Invalid request format',
           raw: '',
           parsed: null,
-          validated: [],
+          suggestedChips: [],
           invalid: [],
           errors: ['Failed to parse request body as JSON'],
         } as ChatResponse,
@@ -182,7 +202,7 @@ export async function POST(request: Request): Promise<Response> {
         error: 'Internal server error',
         raw: '',
         parsed: null,
-        validated: [],
+        suggestedChips: [],
         invalid: [],
         errors: [error instanceof Error ? error.message : 'Unknown error'],
       } as ChatResponse,
@@ -199,28 +219,48 @@ export async function POST(request: Request): Promise<Response> {
  * Processes LLM chips to:
  * 1. Remove any LLM-generated color chips (colors are data-driven)
  * 2. Add color chips derived from available products in suggested subcategories
- * 3. Supplement materials with what's actually available
+ * 3. Filter colors by user intent if color family is mentioned (e.g., "bright colors", "earth tones")
+ * 4. Keep LLM-generated occasions as-is (LLM is context-aware for activities)
+ * 5. Keep LLM-generated materials as-is (no supplementation - LLM is context-aware)
+ * 6. Keep LLM-generated style tags as-is (no supplementation - LLM is context-aware)
+ * 
+ * NOTE: Occasions, materials, and style tags are fully LLM-driven to ensure they match user intent.
+ * For example, "running outfit" should only get athletic occasion and athletic materials (cotton, polyester),
+ * not irrelevant ones (cashmere, silk) that might exist for the subcategories.
  */
 function processChipsWithDerivedFacets(
   llmChips: FilterChip[],
-  products: Product[]
+  products: Product[],
+  currentMessage: string,
+  conversationHistory: Message[] = []
 ): FilterChip[] {
   // Separate chips by type
   const subcategoryChips = llmChips.filter(c => c.type === 'subcategory')
+  const occasionChips = llmChips.filter(c => c.type === 'occasion')
   const materialChips = llmChips.filter(c => c.type === 'material')
   const styleChips = llmChips.filter(c => c.type === 'style_tag')
   const otherChips = llmChips.filter(c => 
     c.type !== 'subcategory' && 
+    c.type !== 'occasion' &&
     c.type !== 'material' && 
     c.type !== 'style_tag' && 
-    c.type !== 'color' // Remove LLM color chips
+    c.type !== 'color' // Remove LLM color chips - colors are data-driven
   )
 
   // Get subcategory values
   const subcategories = subcategoryChips.map(c => c.filterValue as string)
   
-  // Derive colors from products matching the subcategories
-  const availableColors = getColorsForSubcategories(products, subcategories)
+  // Derive colors from products matching the subcategories (fully data-driven)
+  let availableColors = getColorsForSubcategories(products, subcategories)
+  
+  // Detect color intent from conversation (check current message + recent history)
+  const colorIntent = detectColorIntent(currentMessage, conversationHistory)
+  if (colorIntent) {
+    // Filter colors to only include those matching the color intent
+    availableColors = filterColorsByIntent(availableColors, colorIntent)
+    console.log('[DEBUG] Color intent detected:', colorIntent, '→ filtered to', availableColors.length, 'colors')
+  }
+  
   const colorChips: FilterChip[] = availableColors.map(color => ({
     id: `chip-color-${color}`,
     type: 'color',
@@ -229,24 +269,20 @@ function processChipsWithDerivedFacets(
     filterValue: color,
   }))
 
-  // Supplement materials: keep LLM suggestions + add any available ones not already suggested
-  const llmMaterialValues = new Set(materialChips.map(c => c.filterValue as string))
-  const availableMaterials = getMaterialsForSubcategories(products, subcategories)
-  const additionalMaterialChips: FilterChip[] = availableMaterials
-    .filter(m => !llmMaterialValues.has(m))
-    .map(material => ({
-      id: `chip-material-${material}`,
-      type: 'material',
-      label: capitalize(material),
-      filterKey: 'materials',
-      filterValue: material,
-    }))
+  // Occasions, materials, and style tags are fully LLM-driven (no catalog supplementation)
+  // This ensures suggestions are context-aware and relevant to the user's query
 
-  // Combine all chips: subcategories first, then materials, then colors, then styles, then others
+  // Combine all chips in order:
+  // 1. Subcategories (LLM-driven)
+  // 2. Occasions (LLM-driven, context-aware for activities)
+  // 3. Materials (LLM-driven, context-aware)
+  // 4. Colors (data-driven from catalog)
+  // 5. Style tags (LLM-driven, context-aware)
+  // 6. Other chips (size, etc.)
   return [
     ...subcategoryChips,
+    ...occasionChips,
     ...materialChips,
-    ...additionalMaterialChips,
     ...colorChips,
     ...styleChips,
     ...otherChips,
@@ -258,5 +294,60 @@ function processChipsWithDerivedFacets(
  */
 function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1)
+}
+
+/**
+ * Detects color intent from user message and conversation history.
+ * Returns a color family keyword if detected, null otherwise.
+ */
+function detectColorIntent(
+  currentMessage: string,
+  conversationHistory: Message[] = []
+): string | null {
+  // Combine current message with recent user messages (last 3 turns)
+  const recentUserMessages = conversationHistory
+    .filter(msg => msg.role === 'user')
+    .slice(-3)
+    .map(msg => msg.content.toLowerCase())
+  
+  const fullText = [currentMessage.toLowerCase(), ...recentUserMessages].join(' ')
+  
+  // Color family keywords (case-insensitive matching)
+  const colorFamilies: Record<string, string[]> = {
+    'earth tones': ['earth tones', 'earth tone', 'earthtone', 'earthy'],
+    'brights': ['bright colors', 'bright color', 'brights', 'bold colors', 'bold color', 'vivid colors', 'vivid color'],
+    'neutrals': ['neutrals', 'neutral colors', 'neutral color', 'neutral palette'],
+    'pastels': ['pastels', 'pastel colors', 'pastel color', 'soft colors', 'soft color'],
+    'dark': ['dark colors', 'dark color', 'moody colors', 'moody color', 'dark palette'],
+  }
+  
+  // Check for color family mentions
+  for (const [family, keywords] of Object.entries(colorFamilies)) {
+    if (keywords.some(keyword => fullText.includes(keyword))) {
+      return family
+    }
+  }
+  
+  return null
+}
+
+/**
+ * Filters available colors to only include those matching the color intent.
+ * Maps color families to actual catalog colors.
+ */
+function filterColorsByIntent(availableColors: string[], intent: string): string[] {
+  // Map color families to actual catalog colors
+  const colorFamilyMap: Record<string, string[]> = {
+    'earth tones': ['brown', 'beige', 'olive', 'cream'],
+    'brights': ['red', 'pink', 'blue', 'green', 'yellow', 'orange'],
+    'neutrals': ['black', 'white', 'gray', 'beige', 'navy', 'cream'],
+    'pastels': ['pink', 'blue', 'green', 'yellow', 'cream'],
+    'dark': ['black', 'navy', 'gray'],
+  }
+  
+  const matchingColors = colorFamilyMap[intent] || []
+  
+  // Return only colors that are both available AND match the intent
+  return availableColors.filter(color => matchingColors.includes(color.toLowerCase()))
 }
 

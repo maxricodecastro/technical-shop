@@ -131,16 +131,21 @@ The application is a product listing page with an AI-powered conversational shop
 - Appear within the conversation thread as part of assistant responses
 - Clickable to apply filters
 - Visual states:
-  - Unselected: `BadgeButton color="zinc"` (subtle gray)
-  - Selected: `BadgeButton color="indigo"` (or type-specific color)
+  - Unselected: `BadgeButton color="zinc"` (subtle gray), `opacity-70`
+  - Selected: `BadgeButton color` by type + ring highlight + checkmark
 - Color by filter type:
   - Category/Subcategory: `indigo`
   - Colors: `zinc` (neutral to not clash with color name)
   - Materials: `amber`
   - Style tags: `violet`
   - Size: `sky`
-- Selected chips remain only in conversation history (no separate "active filters" UI)
-- When chat sidebar is closed, any applied filters that map to traditional filter controls are automatically set in the filter panel
+
+#### Chip Persistence (Phase 2)
+- **Selected chips persist** across queries and jump to front of row
+- **Unselected chips refresh** with new suggestions on each query
+- **Visual separator** between selected and suggested chips
+- **Deselection** moves chip back to suggested area
+- On new query: selected stay, unselected replaced with new suggestions
 
 ### 7. Global Filters
 - Always visible above the prompt input box

@@ -31,6 +31,17 @@ export function applyFilters(products: Product[], filters: FilterState): Product
       return false
     }
 
+    // Occasions (OR within, AND with others)
+    // Product must have at least one matching occasion
+    if (filters.occasions.length > 0) {
+      const hasMatchingOccasion = product.occasion.some(occ => 
+        filters.occasions.includes(occ)
+      )
+      if (!hasMatchingOccasion) {
+        return false
+      }
+    }
+
     // Colors (OR within, AND with others)
     if (filters.colors.length > 0 && !filters.colors.includes(product.color)) {
       return false
@@ -92,6 +103,12 @@ export function applyChipToFilters(
       newFilters.subcategory = chip.filterValue as string
       break
 
+    case 'occasions':
+      if (!newFilters.occasions.includes(chip.filterValue as string)) {
+        newFilters.occasions = [...newFilters.occasions, chip.filterValue as string]
+      }
+      break
+
     case 'colors':
       if (!newFilters.colors.includes(chip.filterValue as string)) {
         newFilters.colors = [...newFilters.colors, chip.filterValue as string]
@@ -147,6 +164,10 @@ export function removeChipFromFilters(
       newFilters.subcategory = null
       break
 
+    case 'occasions':
+      newFilters.occasions = newFilters.occasions.filter(o => o !== chip.filterValue)
+      break
+
     case 'colors':
       newFilters.colors = newFilters.colors.filter(c => c !== chip.filterValue)
       break
@@ -196,6 +217,7 @@ export function countActiveFilters(filters: FilterState): number {
   let count = 0
   
   if (filters.subcategory) count++
+  count += filters.occasions.length
   count += filters.colors.length
   count += filters.materials.length
   count += filters.sizes.length
@@ -228,6 +250,16 @@ export function filtersToChips(filters: FilterState): FilterChip[] {
       label: capitalize(filters.subcategory),
       filterKey: 'subcategory',
       filterValue: filters.subcategory
+    })
+  }
+
+  for (const occasion of filters.occasions) {
+    chips.push({
+      id: `active-occasion-${occasion}`,
+      type: 'occasion',
+      label: capitalize(occasion),
+      filterKey: 'occasions',
+      filterValue: occasion
     })
   }
 
@@ -412,6 +444,8 @@ function doesProductMatchChip(product: Product, chip: FilterChip): boolean {
   switch (chip.filterKey) {
     case 'subcategory':
       return product.subcategory === value
+    case 'occasions':
+      return product.occasion.includes(value)
     case 'colors':
       return product.color === value
     case 'materials':

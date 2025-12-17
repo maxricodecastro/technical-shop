@@ -11,9 +11,9 @@ import { CatalogFacets, FilterChip, LLMResponse, ValidationResult, ChipType } fr
  */
 const FilterChipSchema = z.object({
   id: z.string(),
-  type: z.enum(['subcategory', 'color', 'material', 'style_tag', 'size', 'price_range']),
+  type: z.enum(['subcategory', 'occasion', 'color', 'material', 'style_tag', 'size', 'price_range']),
   label: z.string(),
-  filterKey: z.enum(['subcategory', 'colors', 'materials', 'styleTags', 'sizes', 'minPrice', 'maxPrice', 'inStock']),
+  filterKey: z.enum(['subcategory', 'occasions', 'colors', 'materials', 'styleTags', 'sizes', 'minPrice', 'maxPrice', 'inStock']),
   filterValue: z.union([z.string(), z.number(), z.boolean()])
 })
 
@@ -168,6 +168,18 @@ function validateChipAgainstCatalog(
       }
       return { isValid: true }
 
+    case 'occasion':
+      if (typeof value !== 'string') {
+        return { isValid: false, error: `Occasion value must be string, got ${typeof value}` }
+      }
+      if (!facets.occasions.includes(value.toLowerCase())) {
+        return { 
+          isValid: false, 
+          error: `Invalid occasion "${value}". Valid: ${facets.occasions.join(', ')}` 
+        }
+      }
+      return { isValid: true }
+
     case 'style_tag':
       if (typeof value !== 'string') {
         return { isValid: false, error: `Style tag value must be string, got ${typeof value}` }
@@ -256,6 +268,9 @@ export function normalizeChip(chip: FilterChip, facets: CatalogFacets): FilterCh
       case 'subcategory':
         normalized.filterValue = facets.subcategories.find(s => s.toLowerCase() === lowerValue) || chip.filterValue
         break
+      case 'occasion':
+        normalized.filterValue = facets.occasions.find(o => o.toLowerCase() === lowerValue) || chip.filterValue
+        break
       case 'color':
         normalized.filterValue = facets.colors.find(c => c.toLowerCase() === lowerValue) || chip.filterValue
         break
@@ -284,6 +299,8 @@ export function getValidValuesForType(
   switch (type) {
     case 'subcategory':
       return facets.subcategories
+    case 'occasion':
+      return facets.occasions
     case 'color':
       return facets.colors
     case 'material':

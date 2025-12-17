@@ -10,6 +10,7 @@ import { Product, CatalogFacets } from '@/types'
 export function getCatalogFacets(products: Product[]): CatalogFacets {
   return {
     subcategories: [...new Set(products.map(p => p.subcategory))].sort(),
+    occasions: [...new Set(products.flatMap(p => p.occasion))].sort(),
     colors: [...new Set(products.map(p => p.color))].sort(),
     materials: [...new Set(products.map(p => p.material))].sort(),
     styleTags: [...new Set(products.flatMap(p => p.style_tags))].sort(),
@@ -59,6 +60,8 @@ export function formatFacetsForPrompt(facets: CatalogFacets): string {
 AVAILABLE FILTER VALUES (only use these exact values):
 
 Subcategories: ${facets.subcategories.join(', ')}
+
+Occasions: ${facets.occasions.join(', ')}
 
 Colors: ${facets.colors.join(', ')}
 
