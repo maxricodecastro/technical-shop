@@ -296,28 +296,3 @@ export function normalizeChip(chip: FilterChip, facets: CatalogFacets): FilterCh
   return normalized
 }
 
-/**
- * Gets the valid facet values for a given chip type.
- * 
- * Simplified for stateless flow:
- * - Removed price_range case
- */
-export function getValidValuesForType(
-  type: ChipType, 
-  facets: CatalogFacets
-): string[] {
-  switch (type) {
-    case 'subcategory':
-      return facets.subcategories
-    case 'occasion':
-      return facets.occasions
-    case 'color':
-      return facets.colors
-    case 'material':
-      return facets.materials
-    case 'style_tag':
-      return facets.styleTags
-    case 'size':
-      return facets.sizes
-  }
-}

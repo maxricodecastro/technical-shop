@@ -1,12 +1,15 @@
 'use client'
 
 import Image from 'next/image'
+import { useSearch } from '@/contexts/SearchContext'
 
 interface HeaderProps {
   logoSize?: number
 }
 
 export function Header({ logoSize = 28 }: HeaderProps) {
+  const { cartCount } = useSearch()
+
   return (
     <header className="sticky top-0 z-50 w-full">
       <div className="grid grid-cols-3 items-center w-full bg-white px-4 sm:px-6 lg:px-4 py-4 border-b border-[var(--border-secondary)]">
@@ -35,7 +38,7 @@ export function Header({ logoSize = 28 }: HeaderProps) {
           <a href="#" className="hover:underline">ENGLISH</a>
           <a href="#" className="hover:underline">LOGIN</a>
           <a href="#" className="hover:underline">WISHLIST</a>
-          <a href="#" className="hover:underline">BAG(0)</a>
+          <a href="#" className="hover:underline">BAG({cartCount})</a>
         </nav>
       </div>
     </header>

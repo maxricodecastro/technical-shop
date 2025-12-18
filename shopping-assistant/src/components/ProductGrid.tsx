@@ -22,7 +22,7 @@ function filterStatesEqual(a: FilterState, b: FilterState): boolean {
 }
 
 export function ProductGrid() {
-  const { filteredProducts, status, filterState } = useSearch()
+  const { filteredProducts, status, filterState, isExpandedView } = useSearch()
   
   const [displayProducts, setDisplayProducts] = useState<Product[]>(filteredProducts)
   const [exitingProducts, setExitingProducts] = useState<Product[] | null>(null)
@@ -82,7 +82,7 @@ export function ProductGrid() {
     }
   }, [animationPhase])
 
-  const gridClasses = "grid grid-cols-4 gap-8 py-4"
+  const gridClasses = `grid ${isExpandedView ? 'grid-cols-3' : 'grid-cols-4'} gap-8 py-4 transition-all duration-300 ease-in-out`
   const gridStyle = { paddingLeft: '120px', paddingRight: '120px' }
 
   // Determine transforms based on animation phase
@@ -122,6 +122,8 @@ export function ProductGrid() {
               price={product.price}
               color={product.color}
               alt={product.title}
+              product={product}
+              isExpandedView={isExpandedView}
             />
           ))}
         </div>
@@ -144,6 +146,8 @@ export function ProductGrid() {
             price={product.price}
             color={product.color}
             alt={product.title}
+            product={product}
+            isExpandedView={isExpandedView}
           />
         ))}
       </div>

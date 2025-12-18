@@ -2,15 +2,17 @@ import Groq from 'groq-sdk'
 import { buildFilterPrompt } from '@/lib/ai/prompts'
 import { validateLLMResponse, normalizeChip } from '@/lib/ai/validate'
 import { getCatalogFacets } from '@/lib/catalog/facets'
-import { 
-  findProductsMatchingAnyChip, 
-  getColorsForSubcategories
-} from '@/lib/filters/engine'
+import { getColorsForSubcategories } from '@/lib/filters/engine'
 import { FilterChip, ChatRequest, ChatResponse, Product } from '@/types'
 import productsData from '@/data/products.json'
 
 // Type assertion for imported JSON
 const products = productsData as Product[]
+
+// Validate environment variable
+if (!process.env.GROQ_API_KEY) {
+  throw new Error('GROQ_API_KEY environment variable is required')
+}
 
 // Initialize Groq client
 const groq = new Groq({
@@ -32,8 +34,33 @@ const groq = new Groq({
  */
 export async function POST(request: Request): Promise<Response> {
   try {
+    // Validate request method
+    if (request.method !== 'POST') {
+      return Response.json(
+        {
+          message: 'Method not allowed',
+          suggestedChips: [],
+          errors: ['Only POST method is supported'],
+        } as ChatResponse,
+        { status: 405 }
+      )
+    }
+
     // Parse request body - simplified: only message field
-    const body = await request.json() as ChatRequest
+    let body: ChatRequest
+    try {
+      body = await request.json() as ChatRequest
+    } catch (parseError) {
+      return Response.json(
+        {
+          message: 'Invalid request format.',
+          suggestedChips: [],
+          errors: ['Failed to parse request body as JSON'],
+        } as ChatResponse,
+        { status: 400 }
+      )
+    }
+
     const { message } = body
 
     // Validate message
@@ -70,6 +97,18 @@ export async function POST(request: Request): Promise<Response> {
 
     const rawResponse = completion.choices[0]?.message?.content || ''
 
+    // Handle empty LLM response
+    if (!rawResponse.trim()) {
+      return Response.json(
+        {
+          message: 'Sorry, I received an empty response. Please try again.',
+          suggestedChips: [],
+          errors: ['Empty response from AI service'],
+        } as ChatResponse,
+        { status: 500 }
+      )
+    }
+
     // Validate the LLM response against catalog facets
     const validated = validateLLMResponse(rawResponse, facets)
 
@@ -95,18 +134,19 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     // Handle Groq API errors
     if (error instanceof Groq.APIError) {
+      const statusCode = error.status || 500
       return Response.json(
         {
           message: 'Sorry, I had trouble processing your request. Please try again.',
           suggestedChips: [],
           errors: [`AI service error: ${error.message}`],
         } as ChatResponse,
-        { status: error.status || 500 }
+        { status: statusCode }
       )
     }
 
-    // Handle JSON parsing errors
-    if (error instanceof SyntaxError) {
+    // Handle JSON parsing errors (from request body)
+    if (error instanceof SyntaxError || error instanceof TypeError) {
       return Response.json(
         {
           message: 'Invalid request format.',
@@ -117,12 +157,25 @@ export async function POST(request: Request): Promise<Response> {
       )
     }
 
-    // Generic error
+    // Handle network/timeout errors
+    if (error instanceof Error && (error.message.includes('fetch') || error.message.includes('timeout'))) {
+      return Response.json(
+        {
+          message: 'Request timed out. Please try again.',
+          suggestedChips: [],
+          errors: ['Network error'],
+        } as ChatResponse,
+        { status: 504 }
+      )
+    }
+
+    // Generic error - log for debugging but don't expose internal details
+    console.error('Unexpected error in /api/chat:', error)
     return Response.json(
       {
         message: 'Something went wrong. Please try again.',
         suggestedChips: [],
-        errors: [error instanceof Error ? error.message : 'Unknown error'],
+        errors: ['An unexpected error occurred'],
       } as ChatResponse,
       { status: 500 }
     )

@@ -22,14 +22,9 @@ type Status = 'idle' | 'loading' | 'success' | 'error'
 interface SearchContextType {
   // Status
   status: Status
-  error: string | null
-  
-  // Search
-  query: string | null
   
   // AI Response
   aiMessage: string | null
-  suggestedChips: FilterChip[]
   
   // Products
   allProducts: Product[]
@@ -39,13 +34,21 @@ interface SearchContextType {
   filterState: FilterState
   catalogFacets: CatalogFacets | null
   
+  // Cart
+  cartCount: number
+  addToCart: (product: Product) => void
+  removeFromCart: (productId: string) => void
+  isInCart: (productId: string) => boolean
+  
+  // Grid View
+  isExpandedView: boolean
+  toggleExpandedView: () => void
+  
   // Actions
   submitSearch: (query: string) => void
   toggleFilter: (chip: FilterChip) => void
   clearFilters: () => void
   isChipActive: (chip: FilterChip) => boolean
-  setAiMessage: (message: string | null) => void
-  setStatus: (status: Status) => void
 }
 
 const SearchContext = createContext<SearchContextType | undefined>(undefined)
@@ -53,14 +56,9 @@ const SearchContext = createContext<SearchContextType | undefined>(undefined)
 export function SearchProvider({ children }: { children: ReactNode }) {
   // Status
   const [status, setStatus] = useState<Status>('idle')
-  const [error, setError] = useState<string | null>(null)
-  
-  // Search
-  const [query, setQuery] = useState<string | null>(null)
   
   // AI Response
   const [aiMessage, setAiMessage] = useState<string | null>(null)
-  const [suggestedChips, setSuggestedChips] = useState<FilterChip[]>([])
   
   // Products
   const [allProducts, setAllProducts] = useState<Product[]>([])
@@ -69,6 +67,14 @@ export function SearchProvider({ children }: { children: ReactNode }) {
   // Filters
   const [filterState, setFilterState] = useState<FilterState>(initialFilterState)
   const [catalogFacets, setCatalogFacets] = useState<CatalogFacets | null>(null)
+  
+  // Cart
+  const [cartItems, setCartItems] = useState<Product[]>([])
+  const cartCount = cartItems.length
+  
+  // Grid View - expanded (3 columns) vs normal (4 columns)
+  const [isExpandedView, setIsExpandedView] = useState(false)
+  const toggleExpandedView = () => setIsExpandedView(prev => !prev)
 
   // Initialize products on mount
   useEffect(() => {
@@ -90,11 +96,11 @@ export function SearchProvider({ children }: { children: ReactNode }) {
       filterState.occasions.length > 0 ||
       filterState.inStock !== null
     
-    if (hasActiveFilters) {
-      setFilteredProducts(applyFilters(allProducts, filterState))
-    } else {
-      setFilteredProducts(allProducts)
-    }
+    setFilteredProducts(
+      hasActiveFilters 
+        ? applyFilters(allProducts, filterState)
+        : allProducts
+    )
   }, [filterState, allProducts])
 
   // Check if a chip is currently active in filter state
@@ -129,9 +135,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
     if (searchQuery.trim().length === 0) return
     
     setStatus('loading')
-    setQuery(searchQuery)
     setAiMessage(null) // Hide message first (slides down)
-    setError(null)
     
     try {
       const response = await fetch('/api/chat', {
@@ -149,9 +153,6 @@ export function SearchProvider({ children }: { children: ReactNode }) {
       // Set AI message
       setAiMessage(data.message)
       
-      // Store suggested chips
-      setSuggestedChips(data.suggestedChips)
-      
       // Auto-apply all chips to filter state
       const newFilterState = data.suggestedChips.reduce(
         (state, chip) => applyChipToFilters(state, chip),
@@ -161,10 +162,8 @@ export function SearchProvider({ children }: { children: ReactNode }) {
       
       setStatus('success')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
       setAiMessage('Sorry, something went wrong. Showing all products.')
       setFilterState(initialFilterState) // Reset filters - show all products
-      setSuggestedChips([])
       setStatus('error')
     }
   }
@@ -185,27 +184,45 @@ export function SearchProvider({ children }: { children: ReactNode }) {
   // Clear all filters
   const clearFilters = () => {
     setFilterState(initialFilterState)
-    setSuggestedChips([])
+    setAiMessage(null) // Clear AI message when filters are cleared
+  }
+
+  // Check if product is in cart
+  const isInCart = (productId: string): boolean => {
+    return cartItems.some(item => item.id === productId)
+  }
+
+  // Add product to cart (prevent duplicates)
+  const addToCart = (product: Product) => {
+    if (!isInCart(product.id)) {
+      setCartItems(prev => [...prev, product])
+    }
+  }
+
+  // Remove product from cart
+  const removeFromCart = (productId: string) => {
+    setCartItems(prev => prev.filter(item => item.id !== productId))
   }
 
   return (
     <SearchContext.Provider
       value={{
         status,
-        error,
-        query,
         aiMessage,
-        suggestedChips,
         allProducts,
         filteredProducts,
         filterState,
         catalogFacets,
+        cartCount,
+        addToCart,
+        removeFromCart,
+        isInCart,
+        isExpandedView,
+        toggleExpandedView,
         submitSearch,
         toggleFilter,
         clearFilters,
         isChipActive,
-        setAiMessage,
-        setStatus,
       }}
     >
       {children}

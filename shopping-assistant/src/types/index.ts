@@ -143,15 +143,3 @@ export interface ChatResponse {
   errors?: string[]
 }
 
-// ============================================
-// MESSAGE TYPES (kept for potential future use)
-// ============================================
-
-export interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  imageUrl?: string
-  suggestedChips?: FilterChip[]
-  timestamp: number
-}
