@@ -70,7 +70,7 @@ export function AIMessage() {
           isVisible ? 'translate-y-0' : 'translate-y-full'
         }`}
       >
-        <div className="bg-white border-t border-[var(--border-secondary)]">
+        <div className="bg-white">
           <div className="mb-4 w-full py-3 px-3 text-[var(--font-size-base)] leading-[var(--line-height-base)] font-[var(--font-weight-regular)] bg-white text-black">
             {aiMessage || ''}
           </div>

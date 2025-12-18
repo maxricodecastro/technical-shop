@@ -10,7 +10,7 @@ export function Sidebar() {
   const isMessageVisible = aiMessage !== null && aiMessage.trim().length > 0
   
   return (
-    <aside className="sticky top-[57px] h-[calc(100vh-57px)] w-84 flex-shrink-0 flex flex-col overflow-hidden relative border-r border-[var(--border-secondary)]">
+    <aside className="sticky top-[57px] h-[calc(100vh-57px)] w-84 flex-shrink-0 flex flex-col overflow-hidden relative">
       {/* Scrollable content area */}
       <div className="flex-1 overflow-y-auto pt-2">
         <div className={`flex flex-col p-4 transition-[padding-bottom] duration-300 ease-out ${
