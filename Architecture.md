@@ -635,7 +635,6 @@ ShopPage (page.tsx)
 │  │     │        ├─ RegenerateButton
 │  │     │        └─ PriceQuestion (if present)
 │  │     ├─ GlobalFilters (fixed)
-│  │     │  ├─ PriceSlider (compact, controlled by minPrice/maxPrice from LLM)
 │  │     │  └─ InStockFilter (compact)
 │  │     └─ PromptInput (fixed bottom)
 │  │        ├─ ImagePreview (if image attached)
@@ -660,13 +659,6 @@ ShopPage (page.tsx)
 - Visible in header but non-functional for MVP
 - Placeholder text: "Search products..."
 - **UNCLEAR:** Should clicking it do anything? Or completely static?
-
-#### PriceSlider
-- Located in GlobalFilters section (always visible above prompt input)
-- Controlled by `minPrice` and `maxPrice` values extracted from LLM responses
-- Range inferred from user queries: "budget is $200" → $0 to $200, "minimum $200" → $200 to max
-- Updates automatically when LLM extracts price values from user messages
-- User can also manually adjust the slider, which sends updated prices in subsequent requests
 
 ## AI Integration: Multi-Prompt Architecture
 

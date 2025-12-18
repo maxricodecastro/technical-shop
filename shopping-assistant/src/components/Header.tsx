@@ -6,7 +6,7 @@ interface HeaderProps {
   logoSize?: number
 }
 
-export function Header({ logoSize = 100 }: HeaderProps) {
+export function Header({ logoSize = 28 }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 w-full">
       <div className="grid grid-cols-3 items-center w-full px-4 sm:px-6 lg:px-8 py-4">
@@ -21,8 +21,8 @@ export function Header({ logoSize = 100 }: HeaderProps) {
         {/* Center Logo */}
         <div className="flex justify-center">
           <Image
-            src="/ssenselogo.svg"
-            alt="SSENSE"
+            src="/ramp.svg"
+            alt="RAMPLOGO"
             width={logoSize}
             height={logoSize * (110 / 540)} // Maintain aspect ratio (540:110)
             className="h-auto"
