@@ -5,6 +5,114 @@ The application is a product listing page with an AI-powered conversational shop
 
 **UI Framework:** Catalyst UI Kit (Tailwind Labs) + custom components
 **Styling:** Tailwind CSS v4.0
+**Icons:** Heroicons (`@heroicons/react`) - Sharp, minimal icons from Tailwind Labs
+
+---
+
+## ✅ Current Implementation Status
+
+### Typography System
+- **Font**: Inter (Google Fonts)
+- **Base Size**: 11px
+- **Line Height**: 15px
+- **Font Weight**: 400 (regular), 500 (medium)
+- **Color**: Black (#000000)
+- **Secondary Text Color**: #7D7D7D (for placeholders, secondary text)
+- **Border Secondary Color**: #ADADAD (for borders)
+- **Configured in**: `globals.css` with CSS variables
+
+### Current Layout Structure
+```
+┌────────────────────────────────────────────────────────────┐
+│                    HEADER (sticky, z-50)                    │
+│  [MENSWEAR] [WOMENSWEAR] [EVERYTHING ELSE] [SEARCH]        │
+│                       SSENSE LOGO                           │
+│         [ENGLISH] [LOGIN] [WISHLIST] [BAG(0)]              │
+├────────────┬───────────────────────────────────────────────┤
+│  SIDEBAR   │                 MAIN                           │
+│  (sticky)  │            Product Grid                        │
+│  w-80      │           (4 columns)                          │
+│  flex-col  │                                                │
+│            │  [Product] [Product] [Product] [Product]       │
+│            │  [Product] [Product] [Product] [Product]       │
+│            │  [Product] [Product] [Product] [Product]       │
+│            │         (scrollable content)                   │
+└────────────┴───────────────────────────────────────────────┘
+```
+
+### Implemented Components
+
+| Component | File | Status |
+|-----------|------|--------|
+| Header | `components/Header.tsx` | ✅ Implemented |
+| Sidebar | `components/Sidebar.tsx` | ✅ Implemented |
+| SearchBar | `components/SearchBar.tsx` | ✅ Implemented |
+| Filters | `components/Filters.tsx` | ✅ Implemented (dummy data) |
+| ProductCard | `components/ProductCard.tsx` | ✅ Implemented |
+| ProductGrid | `components/ProductGrid.tsx` | ✅ Implemented |
+
+### Header Details
+- **Layout**: CSS Grid with 3 columns (left nav, center logo, right nav)
+- **Logo**: SSENSE SVG, size controlled via `logoSize` prop (default: 100px)
+- **Navigation**: 
+  - Left: MENSWEAR (underlined/active), WOMENSWEAR, EVERYTHING ELSE, SEARCH
+  - Right: ENGLISH, LOGIN, WISHLIST, BAG(0)
+- **Sticky**: `position: sticky`, `top: 0`, `z-index: 50`, white background
+
+### Sidebar Details
+- **Width**: `w-80` (320px)
+- **Position**: Sticky, `top: 57px` (below header)
+- **Height**: `calc(100vh - 57px)` (full remaining viewport)
+- **Content**: Flex column, scrollable when overflow
+- **Border**: Right border using `--border-secondary` color (#ADADAD)
+- **Components**:
+  - SearchBar (at top)
+  - Filters component (below search)
+
+### SearchBar Component
+- **File**: `components/SearchBar.tsx`
+- **Width**: Full sidebar width minus padding
+- **Styling**: 
+  - No shadow, no rounded corners
+  - Black border (`border-black`)
+  - Black search icon (Heroicons MagnifyingGlassIcon)
+  - Secondary text color (#7D7D7D) for text and placeholder
+  - Uses CSS variables for typography (11px, 15px line height, regular weight)
+
+### Filters Component
+- **File**: `components/Filters.tsx`
+- **Location**: Inside Sidebar, below SearchBar
+- **Layout**: 
+  - Category names in uppercase, regular font weight
+  - Filter items displayed in rows with spacing (`gap-2`)
+  - Categories spaced with `gap-6`
+- **Behavior**:
+  - Selected filters are underlined
+  - Selected filters move to the front of their row
+  - Clicking toggles selection state
+- **Current State**: Dummy data (CATEGORIES, COLORS, MATERIALS)
+- **Future**: Will be connected to backend filter generation
+
+### ProductCard Details
+- **Layout**: Flex column
+- **Image**: 
+  - Aspect ratio: 640:1200 (portrait)
+  - Max width: 200px
+  - Object position: `object-top` (top anchored, bottom cropped)
+- **Title**: All caps, 11px font
+- **Price**: 11px font with $ prefix
+
+### ProductGrid Details
+- **Columns**: Fixed 4 columns
+- **Gap**: `gap-8`
+- **Padding**: 144px left/right for centering
+- **Scrollable**: Main content area scrolls
+
+### Test Data
+- **File**: `data/dummyProducts.json` (DELETE LATER)
+- **Count**: 16 dummy products for testing scroll behavior
+
+---
 
 ## Layout Structure
 
