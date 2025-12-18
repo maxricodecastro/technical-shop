@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { CatalogFacets, FilterChip, LLMResponse, ValidationResult, ChipType, IntentMode, ReplaceCategory } from '@/types'
+import { CatalogFacets, FilterChip, LLMResponse, ValidationResult, ChipType } from '@/types'
 
 // ============================================
 // ZOD SCHEMAS
@@ -8,51 +8,31 @@ import { CatalogFacets, FilterChip, LLMResponse, ValidationResult, ChipType, Int
 /**
  * Schema for validating filter chip structure from LLM.
  * Note: filterValue validation against catalog happens separately.
+ * 
+ * Simplified for stateless flow:
+ * - Removed price_range type
+ * - Removed minPrice/maxPrice filterKeys
  */
 const FilterChipSchema = z.object({
   id: z.string(),
-  type: z.enum(['subcategory', 'occasion', 'color', 'material', 'style_tag', 'size', 'price_range']),
+  type: z.enum(['subcategory', 'occasion', 'color', 'material', 'style_tag', 'size']),
   label: z.string(),
-  filterKey: z.enum(['subcategory', 'occasions', 'colors', 'materials', 'styleTags', 'sizes', 'minPrice', 'maxPrice', 'inStock']),
-  filterValue: z.union([z.string(), z.number(), z.boolean()])
+  filterKey: z.enum(['subcategory', 'subcategories', 'occasions', 'colors', 'materials', 'styleTags', 'sizes', 'inStock']),
+  filterValue: z.union([z.string(), z.boolean()])
 })
 
 /**
- * Schema for intent mode - how the user's request relates to existing state.
- */
-const IntentModeSchema = z.enum(['replace', 'refine', 'explore'])
-
-/**
- * Schema for replace categories - which categories to clear when replacing.
- * - 'all': Clear everything INCLUDING price
- * - 'all_except_price': Clear all chips but preserve price range
- * - 'price': Clear only price (reset to full range)
- */
-const ReplaceCategorySchema = z.enum([
-  'all',
-  'all_except_price',
-  'subcategory',
-  'occasions',
-  'materials',
-  'colors',
-  'style_tags',
-  'sizes',
-  'price'
-])
-
-/**
  * Schema for validating the complete LLM response structure.
- * Includes intentMode and replaceCategories for state management.
- * Includes minPrice/maxPrice for price slider control.
+ * 
+ * Simplified for stateless flow:
+ * - Removed intentMode
+ * - Removed replaceCategories
+ * - Removed priceQuestion
+ * - Removed minPrice/maxPrice
  */
 const LLMResponseSchema = z.object({
   message: z.string(),
-  intentMode: IntentModeSchema.optional(), // Optional - will default to 'refine'
-  replaceCategories: z.array(ReplaceCategorySchema).optional(), // Optional - will default to []
   chips: z.array(FilterChipSchema),
-  priceQuestion: z.string().nullish(), // Can be string, null, or undefined
-  minPrice: z.number().nullish(), // Extracted minimum price from user query
-  maxPrice: z.number().nullish(), // Extracted maximum price from user query
 })
 
 // ============================================
@@ -67,6 +47,11 @@ const LLMResponseSchema = z.object({
  * 2. Validate structure with Zod schema
  * 3. Validate each chip's filterValue against catalog facets
  * 4. Split into valid/invalid chips
+ * 
+ * Simplified for stateless flow:
+ * - No intent mode handling
+ * - No price extraction
+ * - No conversation context
  * 
  * @param raw - Raw LLM response (string or parsed object)
  * @param facets - Catalog facets for validation
@@ -90,9 +75,7 @@ export function validateLLMResponse(
         success: false,
         valid: [],
         invalid: [],
-        errors: [`Failed to parse JSON: ${e instanceof Error ? e.message : 'Unknown error'}`],
-        intentMode: 'refine' as IntentMode, // Default on failure
-        replaceCategories: [] as ReplaceCategory[]
+        errors: [`Failed to parse JSON: ${e instanceof Error ? e.message : 'Unknown error'}`]
       }
     }
   } else {
@@ -110,25 +93,11 @@ export function validateLLMResponse(
       success: false,
       valid: [],
       invalid: [],
-      errors: [`Schema validation failed: ${zodErrors.join(', ')}`],
-      intentMode: 'refine' as IntentMode, // Default on failure
-      replaceCategories: [] as ReplaceCategory[]
+      errors: [`Schema validation failed: ${zodErrors.join(', ')}`]
     }
   }
 
   const llmResponse = schemaResult.data
-  
-  // Extract intent mode with defaults
-  const intentMode: IntentMode = llmResponse.intentMode || 'refine'
-  
-  // Extract and validate replaceCategories
-  // If intentMode is not 'replace', force replaceCategories to empty
-  let replaceCategories: ReplaceCategory[] = []
-  if (intentMode === 'replace' && llmResponse.replaceCategories) {
-    replaceCategories = llmResponse.replaceCategories
-  }
-  
-  console.log('[DEBUG] Intent mode:', intentMode, 'Replace categories:', replaceCategories)
 
   // Step 3: Validate each chip against catalog facets
   const valid: FilterChip[] = []
@@ -149,18 +118,11 @@ export function validateLLMResponse(
     success: true,
     data: {
       message: llmResponse.message,
-      intentMode,
-      replaceCategories,
       chips: valid,
-      priceQuestion: llmResponse.priceQuestion ?? undefined,
-      minPrice: llmResponse.minPrice ?? null,
-      maxPrice: llmResponse.maxPrice ?? null,
     },
     valid,
     invalid,
-    errors,
-    intentMode,
-    replaceCategories
+    errors
   }
 }
 
@@ -175,6 +137,9 @@ interface ChipValidation {
 
 /**
  * Validates a single chip's filterValue against catalog facets.
+ * 
+ * Simplified for stateless flow:
+ * - Removed price_range case
  */
 function validateChipAgainstCatalog(
   chip: FilterChip,
@@ -257,18 +222,6 @@ function validateChipAgainstCatalog(
       }
       return { isValid: true }
 
-    case 'price_range':
-      if (typeof value !== 'number') {
-        return { isValid: false, error: `Price value must be number, got ${typeof value}` }
-      }
-      if (value < facets.priceRange.min || value > facets.priceRange.max) {
-        return { 
-          isValid: false, 
-          error: `Price ${value} outside range $${facets.priceRange.min}-$${facets.priceRange.max}` 
-        }
-      }
-      return { isValid: true }
-
     default:
       return { isValid: false, error: `Unknown chip type: ${chip.type}` }
   }
@@ -342,11 +295,14 @@ export function normalizeChip(chip: FilterChip, facets: CatalogFacets): FilterCh
 
 /**
  * Gets the valid facet values for a given chip type.
+ * 
+ * Simplified for stateless flow:
+ * - Removed price_range case
  */
 export function getValidValuesForType(
   type: ChipType, 
   facets: CatalogFacets
-): string[] | { min: number; max: number } {
+): string[] {
   switch (type) {
     case 'subcategory':
       return facets.subcategories
@@ -360,8 +316,5 @@ export function getValidValuesForType(
       return facets.styleTags
     case 'size':
       return facets.sizes
-    case 'price_range':
-      return facets.priceRange
   }
 }
-

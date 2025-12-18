@@ -1,4 +1,4 @@
-import { CatalogFacets, FilterChip, FilterState, initialFilterState } from '@/types'
+import { CatalogFacets } from '@/types'
 
 /**
  * Three-Layer Prompt Strategy for Filter Generation
@@ -68,241 +68,6 @@ FIT / STYLE:
 // ============================================
 // HIERARCHY RULES
 // ============================================
-
-// ============================================
-// INTENT MODE RULES
-// ============================================
-
-const INTENT_MODE_RULES = `
-INTENT MODE DETECTION (REQUIRED in every response)
-
-Every response MUST include "intentMode" and "replaceCategories" fields.
-
-═══════════════════════════════════════════════════════════════════════════
-STEP 1: Determine intentMode
-═══════════════════════════════════════════════════════════════════════════
-
-"replace" - User wants to CHANGE/SWITCH something
-  Signals: "Actually...", "Instead...", "Switch to...", "Change to...",
-           "Only...", "Just...", "Forget...", "Not X, but Y...",
-           "Now show me...", "How about...", "[New celebrity] style",
-           Complete topic/aesthetic change, New celebrity name after previous one
-
-"refine" - User wants to ADD or NARROW DOWN current preferences
-  Signals: "Also...", "Add...", "Plus...", "And...", "With...",
-           "But more...", "In [attribute]...", "That are...",
-           Initial queries (nothing to replace yet)
-
-"explore" - User wants to see ALTERNATIVES without changing preferences
-  Signals: "What else...", "Other options...", "Alternatives...",
-           "Show me different...", "Anything else...", "More like this..."
-
-DEFAULT: Use "refine" if unclear (safer to preserve context)
-
-═══════════════════════════════════════════════════════════════════════════
-STEP 2: If intentMode is "replace", determine replaceCategories
-═══════════════════════════════════════════════════════════════════════════
-
-Analyze WHAT the user wants to change:
-
-Language Pattern → replaceCategories value:
-
-"[material] instead" / "actually [material]" / "switch to [material]"
-  → ["materials"]
-  Example: "Actually cotton instead" → ["materials"]
-
-"[subcategory] instead" / "show me [subcategory]" / "switch to [subcategory]"
-  → ["subcategory"]
-  Example: "Dresses instead of sweaters" → ["subcategory"]
-
-"[color] only" / "[color] instead" / "only [color]" / "monochrome" / "only monochrome"
-  → ["colors"]
-  Example: "Only black and white" → ["colors"]
-  Example: "Actually only monochrome colors" → ["colors"]
-
-"more [style]" / "[style] instead" / "make it [style]"
-  → ["style_tags"]
-  Example: "Make it more edgy" → ["style_tags"]
-
-"for [occasion]" / "[occasion] instead"
-  → ["occasions"]
-  Example: "For work instead" → ["occasions"]
-
-"[celebrity] style" / "completely different" / "start over" / "something else entirely"
-  → ["all"]
-  Example: "Show me Zendaya's style" → ["all"]
-  Example: "Now show me Timothée Chalamet style" (after another celebrity) → ["all"]
-  Example: "Start over" / "forget everything" → ["all"]
-
-PRICE-RELATED REPLACEMENTS:
-  "no budget" / "any price" / "remove price limit" / "no price constraint"
-    → ["price"] (resets price slider to full range, keeps all chips)
-  "actually, something [different]" (without mentioning price)
-    → ["all_except_price"] (clears chips but preserves user's budget)
-
-DEFAULT for direction change: Use ["all_except_price"] when user changes direction 
-  but hasn't mentioned price - this preserves their budget constraint.
-  Example: "Actually, something more professional" → ["all_except_price"]
-
-Multiple changes: Combine categories
-  Example: "Cotton in black instead" → ["materials", "colors"]
-  Example: "Switch to leather jackets" → ["subcategory", "materials"]
-
-If intentMode is "refine" or "explore":
-  → replaceCategories: []
-
-═══════════════════════════════════════════════════════════════════════════
-INTENT MODE EXAMPLES
-═══════════════════════════════════════════════════════════════════════════
-
-Example 1: Initial query
-User: "Show me something warm"
-→ intentMode: "refine" (nothing to replace)
-→ replaceCategories: []
-
-Example 2: Adding to preferences
-User: "Also in wool"
-→ intentMode: "refine"
-→ replaceCategories: []
-
-Example 3: Replacing one category
-User: "Actually cotton instead"
-→ intentMode: "replace"
-→ replaceCategories: ["materials"]
-
-Example 4: Replacing colors specifically
-User: "Only monochrome colors"
-→ intentMode: "replace"
-→ replaceCategories: ["colors"]
-
-Example 5: Complete pivot (celebrity change)
-User: "Now show me Timothée Chalamet style"
-→ intentMode: "replace"
-→ replaceCategories: ["all"]
-
-Example 6: Replacing multiple categories
-User: "Switch to leather jackets in black"
-→ intentMode: "replace"
-→ replaceCategories: ["subcategory", "materials", "colors"]
-
-Example 7: Exploring alternatives
-User: "What else do you have?"
-→ intentMode: "explore"
-→ replaceCategories: []
-
-Example 8: Switching aesthetics
-User (after "Frank Ocean style"): "Actually Harry Styles instead"
-→ intentMode: "replace"
-→ replaceCategories: ["all"]
-`
-
-// ============================================
-// PRICE EXTRACTION RULES
-// ============================================
-
-const PRICE_EXTRACTION_RULES = `
-PRICE EXTRACTION (ONLY from explicit dollar amounts)
-
-CRITICAL: Only extract price when user provides a SPECIFIC DOLLAR AMOUNT.
-
-═══════════════════════════════════════════════════════════════════════════
-DO NOT INFER PRICE FROM SUBJECTIVE TERMS
-═══════════════════════════════════════════════════════════════════════════
-
-These words should NOT trigger price extraction:
-- "luxury" / "premium" / "high-end" / "expensive" → minPrice: null, maxPrice: null
-- "budget" / "cheap" / "affordable" / "budget-friendly" → minPrice: null, maxPrice: null
-- "mid-range" / "reasonable" / "quality" → minPrice: null, maxPrice: null
-
-These are style/quality descriptors, NOT price constraints.
-
-═══════════════════════════════════════════════════════════════════════════
-EXTRACTION PATTERNS (ONLY with explicit $ amounts)
-═══════════════════════════════════════════════════════════════════════════
-
-MAX PRICE (user's budget/ceiling):
-- "budget is $X" / "max $X" / "maximum $X" → maxPrice: X
-- "under $X" / "up to $X" / "less than $X" → maxPrice: X
-- "no more than $X" / "can't spend more than $X" → maxPrice: X
-- "around $X" / "about $X" → maxPrice: X (treat as approximate ceiling)
-- "$X" / "X dollars" / "two hundred dollars" → extract the number
-
-MIN PRICE (user specifies minimum):
-- "at least $X" / "minimum $X" / "min $X" → minPrice: X
-- "over $X" / "more than $X" / "above $X" → minPrice: X
-- "starting at $X" / "from $X" → minPrice: X
-
-RANGE:
-- "between $X and $Y" / "$X to $Y" / "$X-$Y" → minPrice: X, maxPrice: Y
-
-NO EXPLICIT PRICE:
-- If user doesn't mention a specific dollar amount → minPrice: null, maxPrice: null
-- Include priceQuestion: "What's your budget?" to ask about budget
-
-═══════════════════════════════════════════════════════════════════════════
-PRICE EXTRACTION EXAMPLES
-═══════════════════════════════════════════════════════════════════════════
-
-Example 1: Max budget (explicit amount)
-User: "I want running shoes under $100"
-→ minPrice: null
-→ maxPrice: 100
-→ priceQuestion: null (price was mentioned)
-
-Example 2: Min price (explicit amount)
-User: "Show me jackets, at least $150"
-→ minPrice: 150
-→ maxPrice: null
-→ priceQuestion: null
-
-Example 3: Range (explicit amounts)
-User: "Dresses between $50 and $200"
-→ minPrice: 50
-→ maxPrice: 200
-→ priceQuestion: null
-
-Example 4: NO price - subjective terms only
-User: "I want luxury sweaters"
-→ minPrice: null
-→ maxPrice: null
-→ priceQuestion: "What's your budget for luxury sweaters?"
-
-Example 5: NO price - no dollar amount
-User: "Something warm and cozy"
-→ minPrice: null
-→ maxPrice: null
-→ priceQuestion: "What's your budget?"
-
-Example 6: Explicit amount with subjective term
-User: "Premium coats at least $200"
-→ minPrice: 200
-→ maxPrice: null
-→ priceQuestion: null (explicit $200 was mentioned)
-
-Example 7: Approximate budget (still explicit)
-User: "Something around $80"
-→ minPrice: null
-→ maxPrice: 80
-→ priceQuestion: null
-
-Example 6: Budget stated upfront
-User: "My budget is $200. I want earthy running outfits"
-→ minPrice: null
-→ maxPrice: 200
-→ priceQuestion: null
-
-Example 7: Cheap/affordable
-User: "Show me cheap t-shirts"
-→ minPrice: null
-→ maxPrice: 50
-→ priceQuestion: null
-
-Example 8: Premium/luxury
-User: "I want luxury sweaters"
-→ minPrice: 150
-→ maxPrice: null
-→ priceQuestion: null
-`
 
 const HIERARCHY_RULES = `
 HIERARCHY RULES (follow strictly):
@@ -411,7 +176,7 @@ IMPORTANT: Materials and style tags MUST be contextually appropriate. Never mix 
 `
 
 // ============================================
-// RESPONSE FORMAT
+// RESPONSE FORMAT (Simplified - no intent mode, no price)
 // ============================================
 
 const RESPONSE_FORMAT = `
@@ -419,8 +184,6 @@ RESPONSE FORMAT (strict JSON only):
 
 {
   "message": "Brief, friendly response (1-2 sentences max)",
-  "intentMode": "refine",
-  "replaceCategories": [],
   "chips": [
     { "id": "chip-occasion-athletic", "type": "occasion", "label": "Athletic", "filterKey": "occasions", "filterValue": "athletic" },
     { "id": "chip-subcategory-t-shirts", "type": "subcategory", "label": "T-shirts", "filterKey": "subcategory", "filterValue": "t-shirts" },
@@ -433,28 +196,12 @@ RESPONSE FORMAT (strict JSON only):
     { "id": "chip-style_tag-casual", "type": "style_tag", "label": "Casual", "filterKey": "styleTags", "filterValue": "casual" },
     { "id": "chip-style_tag-fitted", "type": "style_tag", "label": "Fitted", "filterKey": "styleTags", "filterValue": "fitted" },
     { "id": "chip-style_tag-relaxed", "type": "style_tag", "label": "Relaxed", "filterKey": "styleTags", "filterValue": "relaxed" }
-  ],
-  "minPrice": null,
-  "maxPrice": 200,
-  "priceQuestion": null
+  ]
 }
 
 REQUIRED FIELDS:
 - "message": string (brief, friendly response)
-- "intentMode": "replace" | "refine" | "explore" (REQUIRED - see INTENT MODE DETECTION section)
-- "replaceCategories": array of category names to clear, or [] if not replacing
-  Valid values: "all", "subcategory", "occasions", "materials", "colors", "style_tags", "sizes"
 - "chips": array of filter chips
-- "minPrice": number or null (extracted minimum price from user query)
-- "maxPrice": number or null (extracted maximum price from user query)
-- "priceQuestion": string or null (ask about budget ONLY if user hasn't mentioned price)
-
-PRICE FIELD LOGIC:
-- If user mentions budget/max price → set maxPrice to the number, set priceQuestion to null
-- If user mentions minimum price → set minPrice to the number, set priceQuestion to null  
-- If user mentions a range → set both minPrice and maxPrice
-- If NO price mentioned → set both to null AND include priceQuestion: "What's your budget?"
-- NEVER include priceQuestion if user already mentioned a price!
 
 NOTE: Do NOT include color chips - colors are automatically derived from available products.
 
@@ -480,8 +227,7 @@ RULES:
 1. Each chip must have a unique "id" (use format: "chip-{type}-{value}")
 2. "label" is user-facing (capitalize: "Sweaters", "Wool")
 3. "filterValue" is lowercase and must EXACTLY match available values
-4. Include "priceQuestion" if user hasn't mentioned budget
-5. BE MAXIMALLY GENEROUS WITH CHIPS: Suggest 20-30 chips per response
+4. BE MAXIMALLY GENEROUS WITH CHIPS: Suggest 20-30 chips per response
    - SUBCATEGORIES: Include 7-10 subcategory options for broad queries
    - MATERIALS: Include ALL materials that are RELEVANT to the user's intent (typically 4-6)
      * For "running/athletic" → cotton, polyester, fleece (NOT cashmere, silk, leather, linen)
@@ -493,13 +239,13 @@ RULES:
      * For "formal/work" → formal, classic, elegant, fitted (NOT cozy, oversized, edgy)
      * For "cozy/weekend" → cozy, casual, relaxed, oversized (NOT formal, elegant)
      * ONLY suggest style tags that make sense for the specific use case
-6. DO NOT SUGGEST COLOR CHIPS - colors will be automatically added based on what's available for the suggested subcategories
-7. CONTEXT-AWARE FILTERING IS CRITICAL:
+5. DO NOT SUGGEST COLOR CHIPS - colors will be automatically added based on what's available for the suggested subcategories
+6. CONTEXT-AWARE FILTERING IS CRITICAL:
    - Materials and style tags MUST match the user's intent
    - Do NOT include materials/styles that contradict the query
    - Example: "running outfit" should NOT suggest cashmere, leather, formal, elegant
    - Example: "formal dinner" should NOT suggest denim, fleece, cozy, oversized
-8. Respond with ONLY the JSON object, no markdown, no extra text
+7. Respond with ONLY the JSON object, no markdown, no extra text
 `
 
 // ============================================
@@ -511,21 +257,14 @@ RULES:
  * Combines all three layers: facets, rules, mappings, and examples.
  * 
  * @param facets - Available catalog facets
- * @param currentFilters - Current filter state (derived from selected chips)
- * @param selectedChips - Chips user has already selected (to avoid duplicates)
  */
-export function buildFilterPrompt(
-  facets: CatalogFacets,
-  currentFilters: FilterState = initialFilterState,
-  selectedChips: FilterChip[] = []
-): string {
+export function buildFilterPrompt(facets: CatalogFacets): string {
   const availableFilters = formatAvailableFilters(facets)
-  const currentState = formatCurrentFilters(currentFilters)
-  const selectedSection = formatSelectedChips(selectedChips)
 
   return `You are a helpful shopping assistant for a clothing store.
 
 Your job: Understand what the user wants and suggest clickable filter chips.
+Every request is independent - there is no conversation history.
 
 ═══════════════════════════════════════════════════════════════════════════
 AVAILABLE FILTERS (ONLY use these exact values - anything else will be rejected)
@@ -534,12 +273,6 @@ AVAILABLE FILTERS (ONLY use these exact values - anything else will be rejected)
 ${availableFilters}
 
 ═══════════════════════════════════════════════════════════════════════════
-${INTENT_MODE_RULES}
-═══════════════════════════════════════════════════════════════════════════
-
-${PRICE_EXTRACTION_RULES}
-═══════════════════════════════════════════════════════════════════════════
-
 ${HIERARCHY_RULES}
 ═══════════════════════════════════════════════════════════════════════════
 
@@ -548,28 +281,13 @@ ${CORE_MAPPINGS}
 ═══════════════════════════════════════════════════════════════════════════
 ${FEW_SHOT_EXAMPLES}
 ═══════════════════════════════════════════════════════════════════════════
-CURRENT FILTERS (already applied by user)
-═══════════════════════════════════════════════════════════════════════════
-
-${currentState}
-
-${selectedSection}
-═══════════════════════════════════════════════════════════════════════════
 ${RESPONSE_FORMAT}
 ═══════════════════════════════════════════════════════════════════════════
 
 Remember:
-- ONLY output valid JSON
-- ALWAYS include "intentMode" and "replaceCategories" in your response
-  * Use "replace" when user wants to CHANGE something (with appropriate replaceCategories)
-  * Use "refine" for initial queries or when adding to preferences
-  * Use "explore" when user wants alternatives
-- PRICE EXTRACTION IS CRITICAL:
-  * If user mentions budget/price → extract to minPrice/maxPrice, set priceQuestion to null
-  * If NO price mentioned → set minPrice: null, maxPrice: null, include priceQuestion
-  * Examples: "budget $200" → maxPrice: 200 | "at least $50" → minPrice: 50 | "between $50-$100" → both
+- ONLY output valid JSON with "message" and "chips" fields
 - ONLY use filter values from the AVAILABLE FILTERS list above
-${selectedChips.length > 0 ? '- DO NOT SUGGEST CHIPS THAT ARE ALREADY SELECTED (see list above) - the user already has those active\n' : ''}- BE MAXIMALLY GENEROUS: Suggest 20-30 chips total
+- BE MAXIMALLY GENEROUS: Suggest 20-30 chips total
   * SUBCATEGORIES: Include 7-10 different clothing types
   * MATERIALS: Include 4-6 materials that are RELEVANT to the user's intent
   * STYLE TAGS: Include 4-6 style tags that are RELEVANT to the user's intent
@@ -607,107 +325,5 @@ Materials: ${facets.materials.join(', ')}
 
 Style Tags: ${facets.styleTags.join(', ')}
 
-Sizes: ${facets.sizes.join(', ')}
-
-Price Range: $${facets.priceRange.min} - $${facets.priceRange.max}`
+Sizes: ${facets.sizes.join(', ')}`
 }
-
-/**
- * Formats current filter state for context.
- */
-function formatCurrentFilters(filters: FilterState): string {
-  const parts: string[] = []
-
-  if (filters.subcategory) {
-    parts.push(`Subcategory: ${filters.subcategory}`)
-  }
-  if (filters.occasions.length > 0) {
-    parts.push(`Occasions: ${filters.occasions.join(', ')}`)
-  }
-  if (filters.colors.length > 0) {
-    parts.push(`Colors: ${filters.colors.join(', ')}`)
-  }
-  if (filters.materials.length > 0) {
-    parts.push(`Materials: ${filters.materials.join(', ')}`)
-  }
-  if (filters.styleTags.length > 0) {
-    parts.push(`Style Tags: ${filters.styleTags.join(', ')}`)
-  }
-  if (filters.sizes.length > 0) {
-    parts.push(`Sizes: ${filters.sizes.join(', ')}`)
-  }
-  if (filters.minPrice !== null || filters.maxPrice !== null) {
-    const min = filters.minPrice ?? 'any'
-    const max = filters.maxPrice ?? 'any'
-    parts.push(`Price: $${min} - $${max}`)
-  }
-  if (filters.inStock !== null) {
-    parts.push(`In Stock Only: ${filters.inStock ? 'yes' : 'no'}`)
-  }
-
-  return parts.length > 0 ? parts.join('\n') : 'No filters applied yet.'
-}
-
-/**
- * Formats selected chips into a prompt section telling LLM what NOT to suggest.
- * These are chips the user has already clicked/selected.
- */
-function formatSelectedChips(selectedChips: FilterChip[]): string {
-  if (selectedChips.length === 0) {
-    return ''
-  }
-
-  // Group by type for cleaner presentation
-  const byType: Record<string, string[]> = {}
-  for (const chip of selectedChips) {
-    const type = chip.type
-    if (!byType[type]) {
-      byType[type] = []
-    }
-    byType[type].push(String(chip.filterValue))
-  }
-
-  const parts: string[] = []
-  for (const [type, values] of Object.entries(byType)) {
-    parts.push(`- ${type}: ${values.join(', ')}`)
-  }
-
-  return `
-═══════════════════════════════════════════════════════════════════════════
-ALREADY SELECTED (DO NOT SUGGEST THESE - user already has them active)
-═══════════════════════════════════════════════════════════════════════════
-
-${parts.join('\n')}
-
-IMPORTANT: Do NOT include any of the above values in your "chips" response.
-The user has already selected these filters. Focus on suggesting NEW options
-based on their message.
-`
-}
-
-/**
- * Builds a simpler prompt for regenerating alternative suggestions.
- */
-export function buildRegeneratePrompt(
-  facets: CatalogFacets,
-  currentFilters: FilterState,
-  previousChips: string[]
-): string {
-  return `You are a shopping assistant. The user wants DIFFERENT suggestions than before.
-
-AVAILABLE FILTERS (only use these exact values):
-${formatAvailableFilters(facets)}
-
-CURRENT FILTERS:
-${formatCurrentFilters(currentFilters)}
-
-PREVIOUS SUGGESTIONS (do NOT repeat these):
-${previousChips.join(', ')}
-
-Suggest 10-15 ALTERNATIVE filter chips that complement or expand on the current filters.
-Focus on different attributes than previously suggested. Be generous with subcategory options - include 7-10 subcategories when appropriate.
-
-${RESPONSE_FORMAT}
-`
-}
-

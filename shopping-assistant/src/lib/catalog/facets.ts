@@ -17,10 +17,6 @@ export function getCatalogFacets(products: Product[]): CatalogFacets {
     sizes: ['XS', 'S', 'M', 'L', 'XL'].filter(size => 
       products.some(p => p.size === size)
     ),
-    priceRange: {
-      min: Math.min(...products.map(p => p.price)),
-      max: Math.max(...products.map(p => p.price))
-    }
   }
 }
 
@@ -30,7 +26,7 @@ export function getCatalogFacets(products: Product[]): CatalogFacets {
  */
 export function isValidFacetValue(
   facets: CatalogFacets,
-  facetType: keyof Omit<CatalogFacets, 'priceRange'>,
+  facetType: keyof CatalogFacets,
   value: string
 ): boolean {
   const validValues = facets[facetType]
@@ -43,7 +39,7 @@ export function isValidFacetValue(
  */
 export function normalizeFacetValue(
   facets: CatalogFacets,
-  facetType: keyof Omit<CatalogFacets, 'priceRange'>,
+  facetType: keyof CatalogFacets,
   value: string
 ): string | null {
   const validValues = facets[facetType]
@@ -70,8 +66,5 @@ Materials: ${facets.materials.join(', ')}
 Style Tags: ${facets.styleTags.join(', ')}
 
 Sizes: ${facets.sizes.join(', ')}
-
-Price Range: $${facets.priceRange.min} - $${facets.priceRange.max}
 `.trim()
 }
-

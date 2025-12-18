@@ -22,13 +22,22 @@ export interface Product {
 // FILTER TYPES
 // ============================================
 
+/**
+ * FilterState tracks current filter values for the session.
+ * - Used frontend-side for managing current filter state
+ * - Resets when new AI response arrives
+ * - NOT sent to API (stateless requests)
+ * 
+ * Filter Logic:
+ * - OR within sections (e.g., blouses OR coats)
+ * - AND across sections (e.g., (blouses OR coats) AND blue)
+ */
 export interface FilterState {
   subcategory: string | null
+  subcategories: string[]  // Multiple subcategories for OR logic
   colors: string[]
   materials: string[]
   sizes: string[]
-  minPrice: number | null
-  maxPrice: number | null
   inStock: boolean | null
   styleTags: string[]
   occasions: string[]  // e.g., ["athletic", "professional"]
@@ -36,11 +45,10 @@ export interface FilterState {
 
 export const initialFilterState: FilterState = {
   subcategory: null,
+  subcategories: [],
   colors: [],
   materials: [],
   sizes: [],
-  minPrice: null,
-  maxPrice: null,
   inStock: null,
   styleTags: [],
   occasions: [],
@@ -57,14 +65,13 @@ export type ChipType =
   | 'material'
   | 'style_tag'
   | 'size'
-  | 'price_range'
 
 export interface FilterChip {
   id: string
   type: ChipType
   label: string
   filterKey: keyof FilterState
-  filterValue: string | number | boolean
+  filterValue: string | boolean
 }
 
 // ============================================
@@ -78,67 +85,22 @@ export interface CatalogFacets {
   materials: string[]
   styleTags: string[]
   sizes: string[]
-  priceRange: {
-    min: number
-    max: number
-  }
 }
-
-// ============================================
-// INTENT MODE TYPES
-// ============================================
-
-/**
- * Intent mode indicates how the user's request relates to existing state.
- * - "replace": User wants to change/switch preferences (clear specified categories)
- * - "refine": User wants to add/narrow down (keep existing state)
- * - "explore": User wants alternatives without committing (keep state, show variety)
- */
-export type IntentMode = 'replace' | 'refine' | 'explore'
-
-/**
- * Categories that can be selectively replaced when intentMode is "replace".
- * - "all": Clear everything INCLUDING price
- * - "all_except_price": Clear all chips but preserve price range
- * - Individual categories: Clear only that category
- * - "price": Clear only price (reset to full range)
- */
-export type ReplaceCategory =
-  | 'all'
-  | 'all_except_price'
-  | 'subcategory'
-  | 'occasions'
-  | 'materials'
-  | 'colors'
-  | 'style_tags'
-  | 'sizes'
-  | 'price'
 
 // ============================================
 // LLM RESPONSE TYPES
 // ============================================
 
+/**
+ * Simplified LLM Response.
+ * - No conversation history context
+ * - No price extraction
+ * - No intent modes
+ * - Each request is stateless
+ */
 export interface LLMResponse {
   message: string
-  intentMode: IntentMode
-  replaceCategories: ReplaceCategory[]
   chips: FilterChip[]
-  priceQuestion?: string
-  minPrice?: number | null  // Extracted minimum price from user query
-  maxPrice?: number | null  // Extracted maximum price from user query
-}
-
-export interface LLMRegenerateResponse {
-  message: string
-  chips: FilterChip[]
-}
-
-export interface LLMSimilarResponse {
-  message: string
-  alternatives: {
-    description: string
-    chips: FilterChip[]
-  }[]
 }
 
 // ============================================
@@ -151,48 +113,38 @@ export interface ValidationResult {
   valid: FilterChip[]
   invalid: FilterChip[]
   errors: string[]
-  intentMode: IntentMode
-  replaceCategories: ReplaceCategory[]
 }
 
 // ============================================
 // API TYPES
 // ============================================
 
+/**
+ * Simplified Chat Request.
+ * - Only contains the user message
+ * - No conversation history (stateless)
+ * - No current filters (reset on each response)
+ * - No price range (removed)
+ */
 export interface ChatRequest {
   message: string
-  conversationHistory?: Message[]
-  currentFilters?: FilterState
-  selectedChips?: FilterChip[]      // Chips user has selected (don't suggest duplicates)
-  currentPriceRange?: {             // Current price slider state (manual or LLM-set)
-    min: number
-    max: number
-    isDefault: boolean              // True if price range hasn't been modified
-  }
 }
 
+/**
+ * Simplified Chat Response.
+ * - Contains AI message and suggested chips
+ * - All chips auto-apply to filters
+ * - Frontend handles filter application with OR/AND logic
+ */
 export interface ChatResponse {
-  raw: string
-  parsed: LLMResponse | null
-  suggestedChips: FilterChip[]      // NEW chips only (excludes already-selected)
-  intentMode: IntentMode            // How to handle existing state
-  replaceCategories: ReplaceCategory[]  // Which categories to clear (if intentMode is "replace")
-  invalid: FilterChip[]
-  errors: string[]
-  matchingProducts?: Product[]
-  minPrice?: number | null          // Extracted minimum price for slider
-  maxPrice?: number | null          // Extracted maximum price for slider
-  appliedFilters?: {                // Echo what backend actually used (for state sync verification)
-    suggestedChipCount: number
-    effectiveMinPrice: number | null
-    effectiveMaxPrice: number | null
-    totalProductsBeforeFilter: number
-    totalProductsAfterFilter: number
-  }
+  message: string
+  suggestedChips: FilterChip[]
+  invalid?: FilterChip[]
+  errors?: string[]
 }
 
 // ============================================
-// MESSAGE TYPES (for conversation history)
+// MESSAGE TYPES (kept for potential future use)
 // ============================================
 
 export interface Message {
@@ -201,7 +153,5 @@ export interface Message {
   content: string
   imageUrl?: string
   suggestedChips?: FilterChip[]
-  priceQuestion?: string
   timestamp: number
 }
-

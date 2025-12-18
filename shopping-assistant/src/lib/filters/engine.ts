@@ -3,8 +3,9 @@ import { Product, FilterState, FilterChip } from '@/types'
 /**
  * Filter Engine
  * 
- * Applies AND logic across all filter categories.
- * Within each category (e.g., colors), OR logic is used.
+ * Applies filter logic:
+ * - OR within each category (e.g., blue OR green)
+ * - AND across categories (e.g., (blue OR green) AND wool)
  * 
  * Example:
  * - colors: ["blue", "green"] → product.color is blue OR green
@@ -26,9 +27,17 @@ import { Product, FilterState, FilterChip } from '@/types'
  */
 export function applyFilters(products: Product[], filters: FilterState): Product[] {
   return products.filter(product => {
-    // Subcategory (single value filter)
-    if (filters.subcategory && product.subcategory !== filters.subcategory) {
-      return false
+    // Subcategories (OR within - for multiple subcategories)
+    // If subcategories array has values, use it (takes precedence over single subcategory)
+    if (filters.subcategories.length > 0) {
+      if (!filters.subcategories.includes(product.subcategory)) {
+        return false
+      }
+    } else if (filters.subcategory) {
+      // Single subcategory filter (backward compatibility)
+      if (product.subcategory !== filters.subcategory) {
+        return false
+      }
     }
 
     // Occasions (OR within, AND with others)
@@ -67,14 +76,6 @@ export function applyFilters(products: Product[], filters: FilterState): Product
       }
     }
 
-    // Price Range
-    if (filters.minPrice !== null && product.price < filters.minPrice) {
-      return false
-    }
-    if (filters.maxPrice !== null && product.price > filters.maxPrice) {
-      return false
-    }
-
     // In Stock
     if (filters.inStock !== null && product.in_stock !== filters.inStock) {
       return false
@@ -100,7 +101,18 @@ export function applyChipToFilters(
 
   switch (chip.filterKey) {
     case 'subcategory':
+      // For single subcategory, also add to subcategories array for OR logic
       newFilters.subcategory = chip.filterValue as string
+      if (!newFilters.subcategories.includes(chip.filterValue as string)) {
+        newFilters.subcategories = [...newFilters.subcategories, chip.filterValue as string]
+      }
+      break
+
+    case 'subcategories':
+      // Direct subcategories array for OR logic
+      if (!newFilters.subcategories.includes(chip.filterValue as string)) {
+        newFilters.subcategories = [...newFilters.subcategories, chip.filterValue as string]
+      }
       break
 
     case 'occasions':
@@ -133,14 +145,6 @@ export function applyChipToFilters(
       }
       break
 
-    case 'minPrice':
-      newFilters.minPrice = chip.filterValue as number
-      break
-
-    case 'maxPrice':
-      newFilters.maxPrice = chip.filterValue as number
-      break
-
     case 'inStock':
       newFilters.inStock = chip.filterValue as boolean
       break
@@ -162,6 +166,11 @@ export function removeChipFromFilters(
   switch (chip.filterKey) {
     case 'subcategory':
       newFilters.subcategory = null
+      newFilters.subcategories = newFilters.subcategories.filter(s => s !== chip.filterValue)
+      break
+
+    case 'subcategories':
+      newFilters.subcategories = newFilters.subcategories.filter(s => s !== chip.filterValue)
       break
 
     case 'occasions':
@@ -182,14 +191,6 @@ export function removeChipFromFilters(
 
     case 'styleTags':
       newFilters.styleTags = newFilters.styleTags.filter(t => t !== chip.filterValue)
-      break
-
-    case 'minPrice':
-      newFilters.minPrice = null
-      break
-
-    case 'maxPrice':
-      newFilters.maxPrice = null
       break
 
     case 'inStock':
@@ -217,13 +218,12 @@ export function countActiveFilters(filters: FilterState): number {
   let count = 0
   
   if (filters.subcategory) count++
+  count += filters.subcategories.length
   count += filters.occasions.length
   count += filters.colors.length
   count += filters.materials.length
   count += filters.sizes.length
   count += filters.styleTags.length
-  if (filters.minPrice !== null) count++
-  if (filters.maxPrice !== null) count++
   if (filters.inStock !== null) count++
   
   return count
@@ -251,6 +251,20 @@ export function filtersToChips(filters: FilterState): FilterChip[] {
       filterKey: 'subcategory',
       filterValue: filters.subcategory
     })
+  }
+
+  // Add subcategories (for OR logic)
+  for (const subcategory of filters.subcategories) {
+    // Avoid duplicates with single subcategory
+    if (subcategory !== filters.subcategory) {
+      chips.push({
+        id: `active-subcategory-${subcategory}`,
+        type: 'subcategory',
+        label: capitalize(subcategory),
+        filterKey: 'subcategories',
+        filterValue: subcategory
+      })
+    }
   }
 
   for (const occasion of filters.occasions) {
@@ -300,26 +314,6 @@ export function filtersToChips(filters: FilterState): FilterChip[] {
       label: capitalize(tag),
       filterKey: 'styleTags',
       filterValue: tag
-    })
-  }
-
-  if (filters.minPrice !== null) {
-    chips.push({
-      id: 'active-minprice',
-      type: 'price_range',
-      label: `Min $${filters.minPrice}`,
-      filterKey: 'minPrice',
-      filterValue: filters.minPrice
-    })
-  }
-
-  if (filters.maxPrice !== null) {
-    chips.push({
-      id: 'active-maxprice',
-      type: 'price_range',
-      label: `Max $${filters.maxPrice}`,
-      filterKey: 'maxPrice',
-      filterValue: filters.maxPrice
     })
   }
 
@@ -443,6 +437,7 @@ function doesProductMatchChip(product: Product, chip: FilterChip): boolean {
 
   switch (chip.filterKey) {
     case 'subcategory':
+    case 'subcategories':
       return product.subcategory === value
     case 'occasions':
       return product.occasion.includes(value)
@@ -469,4 +464,3 @@ function doesProductMatchChip(product: Product, chip: FilterChip): boolean {
 function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1)
 }
-
