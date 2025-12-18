@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useSearch } from '@/contexts/SearchContext'
 
 export function SearchBar() {
-  const { submitSearch } = useSearch()
+  const { submitSearch, status } = useSearch()
   const [searchQuery, setSearchQuery] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -54,8 +54,15 @@ export function SearchBar() {
         {/* Search Icon */}
         <MagnifyingGlassIcon className="absolute left-3 top-3 h-4 w-4 text-black pointer-events-none z-10" />
         
-        {/* Up Arrow Icon - appears when user types */}
-        {hasContent && (
+        {/* Spinner - appears when loading */}
+        {status === 'loading' && (
+          <div className="absolute right-3 top-3 h-4 w-4 z-10">
+            <div className="h-4 w-4 border-1 border-black border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+        
+        {/* Up Arrow Icon - appears when user types and not loading */}
+        {hasContent && status !== 'loading' && (
           <ArrowUpIcon 
             className="absolute right-3 top-3 h-4 w-4 text-black cursor-pointer z-10 animate-[fadeInUp_0.2s_ease-out]" 
             onClick={handleSubmit}
@@ -72,7 +79,7 @@ export function SearchBar() {
           rows={1}
           className={`w-full py-3 text-[var(--font-size-base)] leading-[var(--line-height-base)] font-[var(--font-weight-regular)] border border-[var(--border-secondary)] bg-white placeholder:text-[var(--text-secondary)] focus:outline-none focus:ring-0 resize-none ${
             searchQuery ? 'text-black' : 'text-[var(--text-secondary)]'
-          } ${hasContent ? 'pl-10 pr-10' : 'pl-10 pr-3'}`}
+          } ${hasContent || status === 'loading' ? 'pl-10 pr-10' : 'pl-10 pr-3'}`}
           style={{ borderRadius: 0 }}
         />
       </div>

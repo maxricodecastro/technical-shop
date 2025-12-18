@@ -9,7 +9,7 @@ interface HeaderProps {
 export function Header({ logoSize = 28 }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 w-full">
-      <div className="grid grid-cols-3 items-center w-full px-4 sm:px-6 lg:px-4 py-4">
+      <div className="grid grid-cols-3 items-center w-full bg-white px-4 sm:px-6 lg:px-4 py-4 border-b border-[var(--border-secondary)]">
         {/* Left Navigation */}
         <nav className="flex items-center gap-4 text-[var(--font-size-base)] leading-[var(--line-height-base)] font-[var(--font-weight-regular)]">
           <a href="#" className="underline">MENSWEAR</a>

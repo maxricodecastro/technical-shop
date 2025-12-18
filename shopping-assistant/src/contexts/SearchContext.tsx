@@ -161,7 +161,6 @@ export function SearchProvider({ children }: { children: ReactNode }) {
       
       setStatus('success')
     } catch (err) {
-      console.error('Search error:', err)
       setError(err instanceof Error ? err.message : 'Unknown error')
       setAiMessage('Sorry, something went wrong. Showing all products.')
       setFilterState(initialFilterState) // Reset filters - show all products

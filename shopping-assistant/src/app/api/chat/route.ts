@@ -1,6 +1,6 @@
 import Groq from 'groq-sdk'
 import { buildFilterPrompt } from '@/lib/ai/prompts'
-import { validateLLMResponse } from '@/lib/ai/validate'
+import { validateLLMResponse, normalizeChip } from '@/lib/ai/validate'
 import { getCatalogFacets } from '@/lib/catalog/facets'
 import { 
   findProductsMatchingAnyChip, 
@@ -11,11 +11,6 @@ import productsData from '@/data/products.json'
 
 // Type assertion for imported JSON
 const products = productsData as Product[]
-
-// DEBUG: Log API key status on module load
-console.log('[DEBUG] GROQ_API_KEY exists:', !!process.env.GROQ_API_KEY)
-console.log('[DEBUG] GROQ_API_KEY length:', process.env.GROQ_API_KEY?.length || 0)
-console.log('[DEBUG] GROQ_API_KEY prefix:', process.env.GROQ_API_KEY?.substring(0, 10) || 'N/A')
 
 // Initialize Groq client
 const groq = new Groq({
@@ -36,18 +31,13 @@ const groq = new Groq({
  * 5. Return valid chips (all chips are auto-applied)
  */
 export async function POST(request: Request): Promise<Response> {
-  console.log('[DEBUG] POST /api/chat - Request received')
-  
   try {
     // Parse request body - simplified: only message field
-    console.log('[DEBUG] Parsing request body...')
     const body = await request.json() as ChatRequest
     const { message } = body
-    console.log('[DEBUG] Message received:', message)
 
     // Validate message
     if (!message || typeof message !== 'string' || !message.trim()) {
-      console.log('[DEBUG] Invalid message - returning 400')
       return Response.json(
         { 
           message: 'Message is required',
@@ -59,23 +49,16 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     // Get catalog facets for prompt and validation
-    console.log('[DEBUG] Getting catalog facets...')
     const facets = getCatalogFacets(products)
-    console.log('[DEBUG] Facets retrieved - colors:', facets.colors.length, 'materials:', facets.materials.length)
 
     // Build the system prompt with available filters (simplified - no current filters or selected chips)
-    console.log('[DEBUG] Building system prompt...')
     const systemPrompt = buildFilterPrompt(facets)
-    console.log('[DEBUG] System prompt length:', systemPrompt.length)
 
     // Simple message structure - no conversation history
     const llmMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: message },
     ]
-
-    console.log('[DEBUG] Calling Groq API with', llmMessages.length, 'messages...')
-    console.log('[DEBUG] API Key for request:', process.env.GROQ_API_KEY ? 'Present' : 'MISSING!')
 
     // Call Groq LLM
     const completion = await groq.chat.completions.create({
@@ -85,23 +68,19 @@ export async function POST(request: Request): Promise<Response> {
       max_tokens: 1024,
     })
 
-    console.log('[DEBUG] Groq API response received')
     const rawResponse = completion.choices[0]?.message?.content || ''
-    console.log('[DEBUG] Raw response length:', rawResponse.length)
-    console.log('[DEBUG] Raw response preview:', rawResponse.substring(0, 200))
 
     // Validate the LLM response against catalog facets
-    console.log('[DEBUG] Validating LLM response...')
     const validated = validateLLMResponse(rawResponse, facets)
-    console.log('[DEBUG] Validation complete - valid:', validated.valid.length, 'invalid:', validated.invalid.length)
 
-    // Process chips: remove LLM-generated colors, add data-driven colors
-    const processedChips = processChipsWithDerivedFacets(validated.valid, products)
-    console.log('[DEBUG] Processed chips:', processedChips.length)
+    // Normalize chips to match catalog casing (important for color matching)
+    const normalizedChips = validated.valid.map(chip => normalizeChip(chip, facets))
+
+    // Process chips: preserve LLM-requested colors, merge with data-driven colors
+    const processedChips = processChipsWithDerivedFacets(normalizedChips, products, facets)
 
     // All chips are returned (no filtering of "already selected" chips - each request is independent)
     const suggestedChips = processedChips
-    console.log('[DEBUG] Suggested chips:', suggestedChips.length)
 
     // Build simplified response
     const response: ChatResponse = {
@@ -111,24 +90,11 @@ export async function POST(request: Request): Promise<Response> {
       errors: validated.errors.length > 0 ? validated.errors : undefined,
     }
 
-    console.log('[DEBUG] Response message:', response.message)
-    console.log('[DEBUG] Suggested chips count:', suggestedChips.length)
-
     return Response.json(response)
 
   } catch (error) {
-    console.error('[DEBUG] Chat API error caught:', error)
-    console.error('[DEBUG] Error type:', error?.constructor?.name)
-    console.error('[DEBUG] Error message:', error instanceof Error ? error.message : 'Unknown')
-    
-    // Log full error details
-    if (error instanceof Error) {
-      console.error('[DEBUG] Error stack:', error.stack)
-    }
-
     // Handle Groq API errors
     if (error instanceof Groq.APIError) {
-      console.error('[DEBUG] Groq API Error - Status:', error.status, 'Message:', error.message)
       return Response.json(
         {
           message: 'Sorry, I had trouble processing your request. Please try again.',
@@ -141,7 +107,6 @@ export async function POST(request: Request): Promise<Response> {
 
     // Handle JSON parsing errors
     if (error instanceof SyntaxError) {
-      console.error('[DEBUG] JSON Syntax Error:', error.message)
       return Response.json(
         {
           message: 'Invalid request format.',
@@ -153,7 +118,6 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     // Generic error
-    console.error('[DEBUG] Generic error - returning 500')
     return Response.json(
       {
         message: 'Something went wrong. Please try again.',
@@ -171,46 +135,62 @@ export async function POST(request: Request): Promise<Response> {
 
 /**
  * Processes LLM chips to:
- * 1. Remove any LLM-generated color chips (colors are data-driven)
- * 2. Add color chips derived from available products in suggested subcategories
+ * 1. If user explicitly requested colors (LLM generated color chips) → ONLY use those colors, don't add derived colors
+ * 2. If user did NOT explicitly request colors (vague query) → derive colors from available products in suggested subcategories
  * 3. Keep LLM-generated occasions, materials, style tags as-is (LLM is context-aware)
+ * 
+ * CRITICAL: When user explicitly requests a color (e.g., "red sweater"), we honor ONLY that color.
+ * Even if no products match, we still apply the filter (user gets empty results, which is correct).
  */
 function processChipsWithDerivedFacets(
   llmChips: FilterChip[],
-  products: Product[]
+  products: Product[],
+  facets: { colors: string[] }
 ): FilterChip[] {
   // Separate chips by type
   const subcategoryChips = llmChips.filter(c => c.type === 'subcategory')
   const occasionChips = llmChips.filter(c => c.type === 'occasion')
   const materialChips = llmChips.filter(c => c.type === 'material')
   const styleChips = llmChips.filter(c => c.type === 'style_tag')
+  const llmColorChips = llmChips.filter(c => c.type === 'color') // User explicitly requested these colors
   const otherChips = llmChips.filter(c => 
     c.type !== 'subcategory' && 
     c.type !== 'occasion' &&
     c.type !== 'material' && 
     c.type !== 'style_tag' && 
-    c.type !== 'color' // Remove LLM color chips - colors are data-driven
+    c.type !== 'color'
   )
 
   // Get subcategory values
   const subcategories = subcategoryChips.map(c => c.filterValue as string)
   
-  // Derive colors from products matching the subcategories (fully data-driven)
-  const availableColors = getColorsForSubcategories(products, subcategories)
+  // Determine color chips based on whether user explicitly requested colors
+  let colorChips: FilterChip[]
   
-  const colorChips: FilterChip[] = availableColors.map(color => ({
-    id: `chip-color-${color}`,
-    type: 'color',
-    label: capitalize(color),
-    filterKey: 'colors',
-    filterValue: color,
-  }))
+  if (llmColorChips.length > 0) {
+    // User explicitly requested specific colors (e.g., "red sweater")
+    // ONLY use the explicitly requested colors - do NOT add derived colors
+    // This ensures user gets exactly what they asked for, even if it results in no products
+    colorChips = llmColorChips
+  } else {
+    // User did NOT explicitly request colors (vague query like "something warm")
+    // Derive colors from products matching the subcategories (data-driven)
+    const derivedColors = getColorsForSubcategories(products, subcategories)
+    
+    colorChips = derivedColors.map(color => ({
+      id: `chip-color-${color}`,
+      type: 'color' as const,
+      label: capitalize(color),
+      filterKey: 'colors' as const,
+      filterValue: color,
+    }))
+  }
 
   // Combine all chips in order:
   // 1. Subcategories (LLM-driven)
   // 2. Occasions (LLM-driven, context-aware for activities)
   // 3. Materials (LLM-driven, context-aware)
-  // 4. Colors (data-driven from catalog)
+  // 4. Colors (explicitly requested OR derived from catalog)
   // 5. Style tags (LLM-driven, context-aware)
   // 6. Other chips (size, etc.)
   return [

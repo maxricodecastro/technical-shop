@@ -52,8 +52,15 @@ export function applyFilters(products: Product[], filters: FilterState): Product
     }
 
     // Colors (OR within, AND with others)
-    if (filters.colors.length > 0 && !filters.colors.includes(product.color)) {
-      return false
+    // Case-insensitive comparison to handle normalization differences
+    if (filters.colors.length > 0) {
+      const productColorLower = product.color.toLowerCase()
+      const hasMatchingColor = filters.colors.some(filterColor => 
+        filterColor.toLowerCase() === productColorLower
+      )
+      if (!hasMatchingColor) {
+        return false
+      }
     }
 
     // Materials (OR within, AND with others)

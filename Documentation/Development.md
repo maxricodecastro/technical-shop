@@ -99,7 +99,7 @@ AND (style_tag includes cozy OR style_tag includes oversized)
 
 ```bash
 curl -X POST https://api.groq.com/openai/v1/chat/completions \
-  -H "Authorization: Bearer your_groq_api_key_here" \
+  -H "Authorization: Bearer YOUR_GROQ_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama-3.3-70b-versatile",

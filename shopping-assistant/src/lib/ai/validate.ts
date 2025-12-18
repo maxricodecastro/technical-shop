@@ -164,7 +164,10 @@ function validateChipAgainstCatalog(
       if (typeof value !== 'string') {
         return { isValid: false, error: `Color value must be string, got ${typeof value}` }
       }
-      if (!facets.colors.includes(value.toLowerCase())) {
+      // Case-insensitive comparison: check if lowercase value matches any color in catalog
+      const lowerValue = value.toLowerCase()
+      const colorExists = facets.colors.some(c => c.toLowerCase() === lowerValue)
+      if (!colorExists) {
         return { 
           isValid: false, 
           error: `Invalid color "${value}". Valid: ${facets.colors.join(', ')}` 
