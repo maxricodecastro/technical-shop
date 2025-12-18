@@ -4,10 +4,11 @@ interface ProductCardProps {
   imageUrl: string
   title: string
   price: number
+  color: string
   alt?: string
 }
 
-export function ProductCard({ imageUrl, title, price, alt }: ProductCardProps) {
+export function ProductCard({ imageUrl, title, price, color, alt }: ProductCardProps) {
   return (
     <div className="flex flex-col">
       {/* Photo */}
@@ -24,6 +25,11 @@ export function ProductCard({ imageUrl, title, price, alt }: ProductCardProps) {
       {/* Title - All Caps */}
       <div className="text-[var(--font-size-base)] leading-[var(--line-height-base)] font-[var(--font-weight-regular)] uppercase">
         {title}
+      </div>
+
+      {/* Color - All Caps */}
+      <div className="text-[var(--font-size-base)] leading-[var(--line-height-base)] font-[var(--font-weight-regular)] uppercase">
+        {color}
       </div>
 
       {/* Price */}

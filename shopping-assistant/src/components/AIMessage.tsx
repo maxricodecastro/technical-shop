@@ -3,7 +3,8 @@
 import { useSearch } from '@/contexts/SearchContext'
 
 export function AIMessage() {
-  const { aiMessage, status } = useSearch()
+  const { aiMessage } = useSearch()
+  
   const isVisible = aiMessage !== null && aiMessage.trim().length > 0
 
   return (
@@ -12,7 +13,7 @@ export function AIMessage() {
         isVisible ? 'translate-y-0' : 'translate-y-full'
       }`}
     >
-      <div className="p-4 bg-white border-t border-[var(--border-secondary)]">
+      <div className="p-4 bg-white border-[var(--border-secondary)]">
         <div className="w-full py-3 px-3 text-[var(--font-size-base)] leading-[var(--line-height-base)] font-[var(--font-weight-regular)] border border-[var(--border-secondary)] bg-white text-black">
           {aiMessage}
         </div>
@@ -20,4 +21,3 @@ export function AIMessage() {
     </div>
   )
 }
-

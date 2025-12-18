@@ -16,6 +16,7 @@ export function ProductGrid() {
             imageUrl={product.image_url}
             title={product.title}
             price={product.price}
+            color={product.color}
             alt={product.title}
           />
         ))}
