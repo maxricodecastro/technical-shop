@@ -104,8 +104,25 @@ export function ProductGrid() {
 
   return (
     <div className="flex-1 overflow-x-hidden overflow-y-auto pt-2 relative">
+      {/* Empty state */}
+      {displayProducts.length === 0 && status !== 'loading' && (
+        <div 
+          className="py-4"
+          style={{ paddingLeft: '120px', paddingRight: '120px' }}
+        >
+          <div className="flex flex-col gap-1">
+            <div className="text-[13px] leading-[var(--line-height-base)] font-[var(--font-weight-regular)]">
+              No products found
+            </div>
+            <div className="text-[var(--font-size-base)] leading-[var(--line-height-base)] font-[var(--font-weight-regular)]">
+              Try another search
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Exiting grid - slides out to right */}
-      {exitingProducts && (
+      {exitingProducts && exitingProducts.length > 0 && (
         <div 
           className={`${gridClasses} absolute inset-0 overflow-y-auto`}
           style={{ 
@@ -130,27 +147,29 @@ export function ProductGrid() {
       )}
       
       {/* Current grid - slides in from left */}
-      <div 
-        className={gridClasses}
-        style={{ 
-          ...gridStyle,
-          transform: getEnteringTransform(),
-          transition: transitionStyle,
-        }}
-      >
-        {displayProducts.map((product) => (
-          <ProductCard
-            key={product.id}
-            imageUrl={product.image_url}
-            title={product.title}
-            price={product.price}
-            color={product.color}
-            alt={product.title}
-            product={product}
-            isExpandedView={isExpandedView}
-          />
-        ))}
-      </div>
+      {displayProducts.length > 0 && (
+        <div 
+          className={gridClasses}
+          style={{ 
+            ...gridStyle,
+            transform: getEnteringTransform(),
+            transition: transitionStyle,
+          }}
+        >
+          {displayProducts.map((product) => (
+            <ProductCard
+              key={product.id}
+              imageUrl={product.image_url}
+              title={product.title}
+              price={product.price}
+              color={product.color}
+              alt={product.title}
+              product={product}
+              isExpandedView={isExpandedView}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
