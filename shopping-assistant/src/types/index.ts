@@ -29,8 +29,8 @@ export interface Product {
  * - NOT sent to API (stateless requests)
  * 
  * Filter Logic:
- * - OR within sections (e.g., blouses OR coats)
- * - AND across sections (e.g., (blouses OR coats) AND blue)
+ * - OR within sections (e.g., jackets OR coats)
+ * - AND across sections (e.g., (jackets OR coats) AND blue)
  */
 export interface FilterState {
   subcategory: string | null

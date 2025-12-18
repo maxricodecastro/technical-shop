@@ -16,28 +16,28 @@ const CORE_MAPPINGS = `
 CORE CONCEPT MAPPINGS (use these for common terms):
 
 ACTIVITIES / OCCASIONS (use occasion chips for activity-based queries):
-- "running" / "gym" / "workout" / "exercise" → occasion: athletic | subcategories: t-shirts, hoodies, pants, jackets
-- "hiking" / "camping" / "outdoor activities" → occasion: outdoor | subcategories: jackets, pants, hoodies, coats
-- "office" / "work" / "meeting" / "interview" → occasion: professional | subcategories: blouses, pants, skirts, dresses, jackets
-- "wedding" / "gala" / "formal event" → occasion: formal | subcategories: dresses, blouses, pants, skirts, coats
-- "everyday" / "weekend" / "hanging out" → occasion: casual | subcategories: t-shirts, jeans, hoodies, sweaters
+- "running" / "gym" / "workout" / "exercise" → occasion: athletic | subcategories: t-shirts, hoodies, pants, jackets, shorts
+- "hiking" / "camping" / "outdoor activities" → occasion: outdoor | subcategories: jackets, pants, hoodies, coats, vests
+- "office" / "work" / "meeting" / "interview" → occasion: professional | subcategories: shirts, pants, sweaters, jackets, coats, polos
+- "wedding" / "gala" / "formal event" → occasion: formal | subcategories: shirts, pants, coats, sweaters
+- "everyday" / "weekend" / "hanging out" → occasion: casual | subcategories: t-shirts, jeans, hoodies, sweaters, shorts
 - "home" / "relaxing" / "lounging" → occasion: lounge | subcategories: hoodies, sweaters, pants, t-shirts
-- "date" / "dinner" / "going out" → occasion: date | subcategories: dresses, blouses, jeans, jackets
-- "travel" / "flight" / "vacation" → occasion: travel | subcategories: pants, jackets, blouses, dresses
+- "date" / "dinner" / "going out" → occasion: date | subcategories: shirts, jeans, jackets, sweaters
+- "travel" / "flight" / "vacation" → occasion: travel | subcategories: pants, jackets, shirts, shorts
 
 TEMPERATURE / SEASON:
 - "warm" → subcategories: sweaters, coats, hoodies, jackets, pants | materials: wool, fleece, cashmere
-- "cool" / "light" / "lightweight" → subcategories: t-shirts, blouses, dresses, skirts | materials: linen, cotton
-- "summer" → subcategories: dresses, t-shirts, blouses, skirts, pants | materials: linen, cotton | style: casual
+- "cool" / "light" / "lightweight" → subcategories: t-shirts, shirts, shorts, polos | materials: linen, cotton
+- "summer" → subcategories: t-shirts, shirts, shorts, polos, pants | materials: linen, cotton | style: casual
 - "winter" → subcategories: coats, sweaters, hoodies, jackets, pants, jeans | materials: wool, fleece | style: cozy
-- "fall" / "autumn" → subcategories: sweaters, jackets, jeans, pants, dresses, skirts | materials: wool, denim | colors: earth tones
-- "spring" → subcategories: blouses, dresses, skirts, t-shirts, pants, jeans | materials: cotton, linen | colors: pastels
+- "fall" / "autumn" → subcategories: sweaters, jackets, jeans, pants, shirts | materials: wool, denim | colors: earth tones
+- "spring" → subcategories: shirts, t-shirts, pants, jeans, jackets | materials: cotton, linen | colors: pastels
 
 FORMALITY (these also have occasion mappings):
-- "casual" → occasion: casual | subcategories: t-shirts, jeans, hoodies, sweaters, jackets | style: casual, relaxed
-- "professional" / "work" → occasion: professional | subcategories: blouses, pants, skirts, dresses, jackets | style: formal, classic
-- "formal" / "dressy" → occasion: formal | subcategories: dresses, blouses, pants, skirts, coats | materials: silk | style: elegant
-- "date night" → occasion: date | subcategories: dresses, blouses, skirts, pants, jackets | style: elegant, fitted, romantic
+- "casual" → occasion: casual | subcategories: t-shirts, jeans, hoodies, sweaters, jackets, shorts | style: casual, relaxed
+- "professional" / "work" → occasion: professional | subcategories: shirts, pants, sweaters, jackets, coats, polos | style: formal, classic
+- "formal" / "dressy" → occasion: formal | subcategories: shirts, pants, coats, sweaters | materials: wool | style: elegant
+- "date night" → occasion: date | subcategories: shirts, jeans, jackets, sweaters, pants | style: elegant, fitted, modern
 - "loungewear" / "comfy" → occasion: lounge | subcategories: hoodies, pants, sweaters, t-shirts | materials: fleece, cotton | style: cozy, relaxed
 
 COLOR FAMILIES (for context only - do NOT generate color chips):
@@ -49,13 +49,11 @@ COLOR FAMILIES (for context only - do NOT generate color chips):
 NOTE: Colors are automatically derived from available products - do not suggest color chips.
 
 AESTHETIC / VIBE:
-- "minimalist" → subcategories: t-shirts, pants, blouses, dresses, coats, sweaters, jeans, skirts | style: minimalist, modern | colors: neutrals
-- "boho" / "bohemian" → subcategories: dresses, blouses, skirts, pants, jackets, sweaters, t-shirts | materials: linen, cotton | style: relaxed
-- "preppy" → subcategories: blouses, pants, sweaters, skirts, jackets, dresses, coats | style: classic | colors: navy, white
+- "minimalist" → subcategories: t-shirts, pants, shirts, coats, sweaters, jeans | style: minimalist, modern | colors: neutrals
+- "preppy" → subcategories: shirts, pants, sweaters, jackets, coats, polos | style: classic | colors: navy, white
 - "streetwear" → occasion: casual | subcategories: hoodies, jeans, t-shirts, jackets, pants | style: casual, oversized, relaxed
-- "vintage" / "retro" → subcategories: dresses, jeans, blouses, skirts, jackets, sweaters, pants, t-shirts | materials: denim | style: vintage
-- "edgy" → subcategories: jackets, jeans, t-shirts, pants, coats, hoodies, dresses, skirts | materials: leather, denim | style: edgy | colors: black
-- "romantic" → occasion: date | subcategories: dresses, blouses, skirts, sweaters, pants | materials: silk | style: romantic, elegant | colors: pink
+- "vintage" / "retro" → subcategories: jeans, shirts, jackets, sweaters, pants, t-shirts | materials: denim | style: vintage
+- "edgy" → subcategories: jackets, jeans, t-shirts, pants, coats, hoodies | materials: leather, denim | style: edgy | colors: black
 - "cozy" → occasion: lounge | subcategories: sweaters, hoodies, pants, t-shirts, jackets | materials: wool, fleece, cashmere, cotton | style: cozy, oversized, relaxed
 - "laid-back" / "relaxed" → occasion: casual | subcategories: t-shirts, jeans, hoodies, sweaters, jackets, pants | materials: cotton, denim | style: casual, relaxed, oversized
 
@@ -86,18 +84,10 @@ HIERARCHY RULES (follow strictly):
    Example: "something nice" → ask "What's the occasion? [Casual] [Work] [Date night]"
    Example: "asdfghjkl" → ask "I didn't understand that. What are you looking for?"
 
-5. GENDER/CONTEXT AWARENESS → infer from celebrity names, pronouns, or explicit mention
-   - Male celebrity/style (Jacob Elordi, Harry Styles, Timothée Chalamet, etc.):
-     → ONLY suggest: t-shirts, jeans, jackets, pants, hoodies, sweaters, coats
-     → DO NOT suggest: dresses, blouses, skirts (these are not relevant)
-   - Female celebrity/style (Zendaya, Taylor Swift, Hailey Bieber, etc.):
-     → Can suggest ALL subcategories including dresses, blouses, skirts
-   - Explicit "men's" / "masculine" / "boyfriend style":
-     → Exclude dresses, blouses, skirts
-   - Explicit "women's" / "feminine":
-     → Include all subcategories
-   - Ambiguous/unspecified:
-     → Default to unisex items OR ask clarifying question
+5. CELEBRITY STYLE → map to relevant aesthetic/vibe
+   - Example: "dress like Jacob Elordi" → casual, fitted, modern style
+   - Example: "dress like Harry Styles" → bold, edgy, vintage, modern style
+   - Example: "dress like Timothée Chalamet" → minimalist, elegant, modern style
 `
 
 // ============================================
@@ -109,68 +99,53 @@ REASONING EXAMPLES (apply similar logic to new concepts):
 
 Example 1: "cozy weekend wear"
 → Think: cozy = comfort + warmth, weekend = casual - COVERS MANY CLOTHING TYPES
-→ Subcategories: sweaters, hoodies, t-shirts, pants, jackets, jeans, dresses (ALL comfortable items)
+→ Subcategories: sweaters, hoodies, t-shirts, pants, jackets, jeans (ALL comfortable items)
 → Materials: fleece, wool, cotton, cashmere (warm, soft fabrics - NOT silk, linen, leather)
 → Style: cozy, casual, relaxed, oversized (comfort-focused - NOT formal, elegant, edgy)
-→ Response: 7-10 subcategory chips + 4-5 material chips + 4-5 style chips
+→ Response: 6-8 subcategory chips + 4-5 material chips + 4-5 style chips
 
 Example 2: "something for a job interview"
 → Think: job interview = professional, polished - NEED FULL OUTFIT OPTIONS
 → OCCASION: professional (CRITICAL - always include occasion chip for activity queries)
-→ Subcategories: blouses, pants, dresses, skirts, jackets, coats, sweaters (full professional wardrobe)
-→ Materials: wool, cotton, silk (professional fabrics - NOT denim, fleece, leather)
+→ Subcategories: shirts, pants, sweaters, jackets, coats, polos (full professional wardrobe)
+→ Materials: wool, cotton (professional fabrics - NOT denim, fleece, leather)
 → Style: formal, classic, elegant, fitted, modern (professional - NOT cozy, oversized, edgy, vintage)
-→ Response: 1 occasion chip + 7-10 subcategory chips + 3-4 material chips + 4-5 style chips
+→ Response: 1 occasion chip + 6-8 subcategory chips + 2-3 material chips + 4-5 style chips
 
 Example 3: "something for running" / "workout clothes" / "athletic wear"
 → Think: running = athletic, performance - need breathable, stretchy fabrics
 → OCCASION: athletic (CRITICAL - always include occasion chip for activity queries)
-→ Subcategories: t-shirts, pants, hoodies, jackets (athletic items - NOT dresses, blouses, skirts, coats)
+→ Subcategories: t-shirts, pants, hoodies, jackets, shorts (athletic items - NOT coats)
 → Materials: cotton, polyester, fleece (athletic fabrics - NOT cashmere, silk, leather, linen, denim, wool)
-→ Style: casual, fitted, modern, relaxed (athletic styles - NOT formal, elegant, vintage, romantic, edgy)
-→ Response: 1 occasion chip + 4-5 subcategory chips + 3 material chips + 4 style chips
+→ Style: casual, fitted, modern, relaxed (athletic styles - NOT formal, elegant, vintage, edgy)
+→ Response: 1 occasion chip + 5 subcategory chips + 3 material chips + 4 style chips
 → CRITICAL: Do NOT suggest formal, elegant, vintage, edgy for athletic wear
 
 Example 3b: "versatile pieces for travel and outdoor adventures"
 → Think: travel + outdoor = TWO occasions, need versatile, durable pieces
 → OCCASIONS: travel, outdoor (MULTIPLE occasions when query mentions multiple activities)
-→ Subcategories: jackets, pants, hoodies, t-shirts, coats (versatile outdoor items)
+→ Subcategories: jackets, pants, hoodies, t-shirts, coats, vests (versatile outdoor items)
 → Materials: cotton, polyester, fleece (durable, practical fabrics)
 → Style: casual, relaxed, modern (practical styles)
-→ Response: 2 occasion chips + 5-6 subcategory chips + 3 material chips + 3 style chips
+→ Response: 2 occasion chips + 6 subcategory chips + 3 material chips + 3 style chips
 
 Example 4: "dark academia aesthetic"
 → Think: trending aesthetic = scholarly, intellectual - SPANS ENTIRE WARDROBE
-→ Subcategories: sweaters, blouses, pants, skirts, coats, jackets, dresses, t-shirts (full aesthetic wardrobe)
+→ Subcategories: sweaters, shirts, pants, coats, jackets, t-shirts (full aesthetic wardrobe)
 → Materials: wool, cotton, cashmere (scholarly fabrics - NOT polyester, fleece)
 → Style: classic, vintage, elegant, fitted (intellectual vibe - NOT cozy, oversized, edgy)
-→ Response: 8-10 subcategory chips + 3-4 material chips + 4 style chips
+→ Response: 6-8 subcategory chips + 3-4 material chips + 4 style chips
 
-Example 5a: "dress like Jacob Elordi" (MALE celebrity)
-→ Think: Jacob Elordi = male celebrity, known for casual-relaxed, fitted basics
-→ GENDER FILTER: Male → EXCLUDE dresses, blouses, skirts
-→ Subcategories: t-shirts, jeans, jackets, pants, hoodies, sweaters, coats (7 options - NO dresses/blouses/skirts)
-→ Materials: cotton, denim, wool (casual masculine fabrics)
-→ Style: casual, relaxed, fitted, modern (NOT formal, elegant, romantic)
+Example 5: "dress like Jacob Elordi"
+→ Think: Jacob Elordi = known for casual-relaxed, fitted basics
+→ Subcategories: t-shirts, jeans, jackets, pants, hoodies, sweaters, coats (7 options)
+→ Materials: cotton, denim, wool (casual fabrics)
+→ Style: casual, relaxed, fitted, modern (NOT formal, elegant)
 → Response: 7 subcategory chips + 3 material chips + 4 style chips
 
-Example 5b: "dress like Zendaya" (FEMALE celebrity)
-→ Think: Zendaya = female celebrity, known for bold, fashion-forward style
-→ GENDER FILTER: Female → all subcategories applicable
-→ Subcategories: dresses, blouses, pants, jackets, skirts, coats, t-shirts, jeans, sweaters (all options)
-→ Materials: silk, cotton, leather, wool (fashion-forward fabrics)
-→ Style: elegant, edgy, modern, fitted (bold fashion - NOT cozy, casual, relaxed)
-→ Response: 8-10 subcategory chips + 4 material chips + 4 style chips
-
-Example 6: "masculine outfit" / "men's style"
-→ Think: explicit masculine = exclude feminine-coded items
-→ Subcategories: t-shirts, jeans, jackets, pants, hoodies, sweaters, coats (NO dresses/blouses/skirts)
-→ Materials: cotton, denim, wool, leather (masculine fabrics)
-→ Style: casual, fitted, modern, classic (NOT romantic, elegant)
-
-Example 7: "something"
+Example 6: "something"
 → Think: too vague, cannot determine intent
-→ Response: ask "What are you looking for? [Tops] [Bottoms] [Dresses] [Outerwear]"
+→ Response: ask "What are you looking for? [Tops] [Bottoms] [Outerwear]"
 
 IMPORTANT: Materials and style tags MUST be contextually appropriate. Never mix athletic with formal, cozy with elegant, etc.
 `
@@ -220,22 +195,22 @@ OCCASION VALUES (use when user mentions an activity or purpose):
 - formal (wedding, gala, special events)
 - casual (everyday, weekend, hanging out)
 - lounge (home, relaxing, comfort)
-- date (dinner, romantic, going out)
+- date (dinner, going out)
 - travel (vacation, flight, road trip)
 
 RULES:
 1. Each chip must have a unique "id" (use format: "chip-{type}-{value}")
 2. "label" is user-facing (capitalize: "Sweaters", "Wool")
 3. "filterValue" is lowercase and must EXACTLY match available values
-4. BE MAXIMALLY GENEROUS WITH CHIPS: Suggest 20-30 chips per response
-   - SUBCATEGORIES: Include 7-10 subcategory options for broad queries
-   - MATERIALS: Include ALL materials that are RELEVANT to the user's intent (typically 4-6)
+4. BE MAXIMALLY GENEROUS WITH CHIPS: Suggest 15-25 chips per response
+   - SUBCATEGORIES: Include 6-8 subcategory options for broad queries
+   - MATERIALS: Include ALL materials that are RELEVANT to the user's intent (typically 3-5)
      * For "running/athletic" → cotton, polyester, fleece (NOT cashmere, silk, leather, linen)
-     * For "formal/elegant" → silk, wool, cotton (NOT denim, fleece, leather)
+     * For "formal/elegant" → wool, cotton (NOT denim, fleece, leather)
      * For "cozy/warm" → wool, cashmere, fleece, cotton (NOT linen, silk)
      * ONLY suggest materials that make sense for the specific use case
    - STYLE TAGS: Include ALL style tags that are RELEVANT to the user's intent (typically 4-6)
-     * For "running/athletic" → casual, fitted, modern, relaxed (NOT formal, elegant, vintage, romantic)
+     * For "running/athletic" → casual, fitted, modern, relaxed (NOT formal, elegant, vintage)
      * For "formal/work" → formal, classic, elegant, fitted (NOT cozy, oversized, edgy)
      * For "cozy/weekend" → cozy, casual, relaxed, oversized (NOT formal, elegant)
      * ONLY suggest style tags that make sense for the specific use case
@@ -261,7 +236,7 @@ RULES:
 export function buildFilterPrompt(facets: CatalogFacets): string {
   const availableFilters = formatAvailableFilters(facets)
 
-  return `You are a helpful shopping assistant for a clothing store.
+  return `You are a helpful shopping assistant for a menswear clothing store.
 
 Your job: Understand what the user wants and suggest clickable filter chips.
 Every request is independent - there is no conversation history.
@@ -287,21 +262,16 @@ ${RESPONSE_FORMAT}
 Remember:
 - ONLY output valid JSON with "message" and "chips" fields
 - ONLY use filter values from the AVAILABLE FILTERS list above
-- BE MAXIMALLY GENEROUS: Suggest 20-30 chips total
-  * SUBCATEGORIES: Include 7-10 different clothing types
-  * MATERIALS: Include 4-6 materials that are RELEVANT to the user's intent
+- BE MAXIMALLY GENEROUS: Suggest 15-25 chips total
+  * SUBCATEGORIES: Include 6-8 different clothing types
+  * MATERIALS: Include 3-5 materials that are RELEVANT to the user's intent
   * STYLE TAGS: Include 4-6 style tags that are RELEVANT to the user's intent
 - CONTEXT-AWARE MATERIALS AND STYLES ARE CRITICAL:
   * "running/athletic" → cotton, polyester, fleece | casual, fitted, modern (NOT cashmere, silk, formal, elegant)
-  * "formal/work" → wool, silk, cotton | formal, classic, elegant (NOT denim, fleece, cozy, oversized)
+  * "formal/work" → wool, cotton | formal, classic, elegant (NOT denim, fleece, cozy, oversized)
   * "cozy/weekend" → wool, fleece, cashmere, cotton | cozy, relaxed, casual (NOT silk, formal, elegant)
   * NEVER mix contradictory concepts (athletic + formal, cozy + elegant)
 - DO NOT generate color chips - they are automatically added based on available products
-- GENDER AWARENESS IS CRITICAL:
-  * Male celebrities (Jacob Elordi, Harry Styles, etc.) → NO dresses, blouses, skirts
-  * Female celebrities → all subcategories OK
-  * "Masculine" / "men's" → NO dresses, blouses, skirts
-  * When in doubt about gender context, ask or suggest unisex items
 - Be concise and helpful
 - If unsure, ask a clarifying question instead of guessing
 `
