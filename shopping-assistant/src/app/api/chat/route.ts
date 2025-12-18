@@ -9,15 +9,13 @@ import productsData from '@/data/products.json'
 // Type assertion for imported JSON
 const products = productsData as Product[]
 
-// Validate environment variable
-if (!process.env.GROQ_API_KEY) {
-  throw new Error('GROQ_API_KEY environment variable is required')
+// Initialize Groq client lazily (will be created in POST handler)
+// Note: Environment variable is validated in POST handler before calling this
+function getGroqClient() {
+  return new Groq({
+    apiKey: process.env.GROQ_API_KEY!,
+  })
 }
-
-// Initialize Groq client
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-})
 
 /**
  * POST /api/chat
@@ -34,6 +32,18 @@ const groq = new Groq({
  */
 export async function POST(request: Request): Promise<Response> {
   try {
+    // Validate environment variable first
+    if (!process.env.GROQ_API_KEY) {
+      return Response.json(
+        {
+          message: 'Server configuration error. Please contact support.',
+          suggestedChips: [],
+          errors: ['GROQ_API_KEY environment variable is not configured'],
+        } as ChatResponse,
+        { status: 500 }
+      )
+    }
+
     // Validate request method
     if (request.method !== 'POST') {
       return Response.json(
@@ -87,7 +97,8 @@ export async function POST(request: Request): Promise<Response> {
       { role: 'user', content: message },
     ]
 
-    // Call Groq LLM
+    // Initialize Groq client and call LLM
+    const groq = getGroqClient()
     const completion = await groq.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
       messages: llmMessages,
